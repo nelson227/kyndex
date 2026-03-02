@@ -1,0 +1,10 @@
+node_modules
+.git
+.env.local
+*.log
+.next
+dist
+build
+coverage
+.turbo
+.DS_Store
