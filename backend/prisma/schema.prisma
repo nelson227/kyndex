@@ -1,0 +1,509 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ CORE MODELS ============
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  role          String    @default("USER")
+  status        String    @default("ACTIVE")
+  userType      String    @default("BOTH")  // CUSTOMER, PROVIDER, BOTH
+  
+  // Relations
+  profile       Profile?
+  services      Service[]
+  serviceRequests ServiceRequest[]
+  
+  bookingsAsCustomer    Booking[] @relation("customer")
+  bookingsAsProvider    Booking[] @relation("provider")
+  
+  sentMessages    Message[] @relation("sent")
+  conversationParticipants ConversationParticipant[]
+  
+  sentReviews    Review[] @relation("from")
+  receivedReviews Review[] @relation("to")
+  
+  userBadges    UserBadge[]
+  
+  sentTransactions    Transaction[] @relation("from")
+  receivedTransactions Transaction[] @relation("to")
+  
+  creditWallet  CreditWallet?
+  transactionLedger TransactionLedger[]
+  
+  auditLogs     AuditLog[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([email])
+  @@index([status])
+  @@index([userType])
+  @@index([createdAt])
+}
+
+model Profile {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  firstName     String?
+  lastName      String?
+  bio           String?
+  
+  // Location data
+  location      String?
+  city          String?
+  postalCode    String?
+  latitude      Float?
+  longitude     Float?
+  
+  avatarUrl     String?
+  languages     String    @default("en")
+  availability  String    @default("flexible")
+  timezone      String    @default("UTC")
+  
+  // Pricing
+  hourlyRate    Float?
+  responseTime  Int       @default(24)  // in hours
+  
+  // Reputation
+  averageRating Float     @default(0)
+  totalReviews  Int       @default(0)
+  
+  // Portfolio/Service images
+  portfolioImages PortfolioImage[]
+  
+  // Profile completion status
+  isProfileComplete Boolean @default(false)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([city])
+  @@index([latitude])
+  @@index([longitude])
+  @@index([averageRating])
+}
+
+model PortfolioImage {
+  id            String    @id @default(uuid())
+  profileId     String
+  profile       Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  imageUrl      String
+  title         String?
+  description   String?
+  
+  createdAt     DateTime  @default(now())
+
+  @@index([profileId])
+}
+
+// ============ SKILLS MODELS ============
+
+model SkillCategory {
+  id            String    @id @default(uuid())
+  name          String    @unique
+  slug          String    @unique
+  icon          String?
+  description   String?
+  color         String?   // Hex color for UI
+  
+  skills        Skill[]
+  services      Service[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Skill {
+  id            String    @id @default(uuid())
+  name          String
+  categoryId    String
+  category      SkillCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  description   String?
+  icon          String?
+  
+  services      Service[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([name, categoryId])
+  @@index([categoryId])
+  @@index([name])
+}
+
+// ============ SERVICE MODELS ============
+
+model Service {
+  id            String    @id @default(uuid())
+  
+  userId        String
+  provider      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  skillId       String
+  skill         Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  
+  categoryId    String
+  category      SkillCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String?
+  
+  // Pricing
+  basePrice     Float
+  currency      String    @default("EUR")
+  priceType     String    @default("HOURLY")  // HOURLY, FIXED, NEGOTIABLE
+  estimatedDuration Int?  // in minutes
+  
+  // Service details
+  tags          String    @default("")  // Comma separated
+  location      String?
+  maxDistance   Int?      // in km
+  onsite        Boolean   @default(true)
+  remote        Boolean   @default(false)
+  
+  // Status & Visibility
+  status        String    @default("ACTIVE")  // ACTIVE, INACTIVE, ARCHIVED
+  isVerified    Boolean   @default(false)
+  
+  // Ratings
+  averageRating Float     @default(0)
+  totalBookings Int       @default(0)
+  totalReviews  Int       @default(0)
+  
+  serviceRequests ServiceRequest[]
+  bookings      Booking[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([skillId])
+  @@index([status])
+  @@index([averageRating])
+  @@index([createdAt])
+}
+
+model ServiceRequest {
+  id            String    @id @default(uuid())
+  
+  serviceId     String?
+  service       Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  
+  customerId    String
+  customer      User      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String?
+  budget        Float?
+  currency      String    @default("EUR")
+  
+  categoryId    String?
+  requiredSkills String?  // Comma separated
+  
+  location      String?
+  dueDate       DateTime?
+  
+  status        String    @default("OPEN")  // OPEN, IN_PROGRESS, COMPLETED, CANCELLED
+  
+  bookings      Booking[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([customerId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============ MESSAGING MODELS ============
+
+// ============ MESSAGING MODELS ============
+
+model Conversation {
+  id            String    @id @default(uuid())
+  title         String?
+  
+  participants  ConversationParticipant[]
+  messages      Message[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([createdAt])
+}
+
+model ConversationParticipant {
+  id              String    @id @default(uuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  joinedAt        DateTime  @default(now())
+  lastReadAt      DateTime?
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id              String    @id @default(uuid())
+  
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  bookingId       String?
+  booking         Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  senderId        String
+  sender          User      @relation("sent", fields: [senderId], references: [id], onDelete: Cascade)
+  
+  content         String
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([conversationId])
+  @@index([bookingId])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+// ============ TRANSACTION MODELS ============
+
+model Transaction {
+  id              String    @id @default(uuid())
+  
+  fromUserId      String
+  fromUser        User      @relation("from", fields: [fromUserId], references: [id], onDelete: Cascade)
+  
+  toUserId        String
+  toUser          User      @relation("to", fields: [toUserId], references: [id], onDelete: Cascade)
+  
+  type            String    @default("CREDITS")
+  amount          Float
+  currency        String    @default("EUR")
+  
+  status          String    @default("PENDING")
+  description     String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  completedAt     DateTime?
+
+  ledgerEntries   TransactionLedger[]
+
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model CreditWallet {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  balance         Float     @default(0)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model TransactionLedger {
+  id              String    @id @default(uuid())
+  
+  transactionId   String
+  transaction     Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type            String
+  amount          Float
+  
+  description     String?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([transactionId])
+  @@index([createdAt])
+}
+
+// ============ BOOKING MODELS ============
+
+model Booking {
+  id              String    @id @default(uuid())
+  
+  serviceId       String
+  service         Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  
+  serviceRequestId String?
+  serviceRequest  ServiceRequest? @relation(fields: [serviceRequestId], references: [id], onDelete: SetNull)
+  
+  customerId      String
+  customer        User      @relation("customer", fields: [customerId], references: [id], onDelete: Cascade)
+  
+  providerId      String
+  provider        User      @relation("provider", fields: [providerId], references: [id], onDelete: Cascade)
+  
+  // Booking details
+  title           String
+  description     String?
+  
+  // Pricing
+  price           Float
+  currency        String    @default("EUR")
+  
+  // Dates
+  scheduledDate   DateTime?
+  duration        Int?      // in minutes
+  completedDate   DateTime?
+  
+  // Location
+  location        String?
+  isRemote        Boolean   @default(false)
+  
+  // Status
+  status          String    @default("PENDING")  // PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED
+  
+  // Communication
+  messages        Message[]
+  
+  // Review after completion
+  review          Review?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============ BADGES & QUALIFICATIONS ============
+
+model Badge {
+  id              String    @id @default(uuid())
+  
+  name            String    @unique
+  slug            String    @unique
+  description     String?
+  icon            String?
+  color           String?   // Hex color
+  
+  requirement     String?   // Description of requirement
+  
+  userBadges      UserBadge[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model UserBadge {
+  id              String    @id @default(uuid())
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  badgeId         String
+  badge           Badge     @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  
+  earnedAt        DateTime  @default(now())
+  expiresAt       DateTime?
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId])
+}
+
+// ============ REVIEW & REPUTATION MODELS ============
+
+model Review {
+  id              String    @id @default(uuid())
+  
+  bookingId       String    @unique
+  booking         Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  fromUserId      String
+  fromUser        User      @relation("from", fields: [fromUserId], references: [id], onDelete: Cascade)
+  
+  toUserId        String
+  toUser          User      @relation("to", fields: [toUserId], references: [id], onDelete: Cascade)
+  
+  // Overall rating
+  overallRating   Int       // 1-5
+  
+  // Detailed criteria (like Yoojo)
+  quality         Int?      // 1-5 - Quality of work
+  professionalism Int?      // 1-5 - Professionalism
+  punctuality     Int?      // 1-5 - Punctuality
+  communication   Int?      // 1-5 - Communication
+  
+  comment         String?
+  tags            String    @default("")  // Comma separated positive tags
+  
+  // Admin
+  isVerified      Boolean   @default(false)
+  flagged         Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([toUserId])
+  @@index([fromUserId])
+  @@index([overallRating])
+  @@index([createdAt])
+}
+
+// ============ AUDIT & LOGS ============
+
+model AuditLog {
+  id              String    @id @default(uuid())
+  
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  action          String
+  tableName       String?
+  recordId        String?
+  changes         String?
+  
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

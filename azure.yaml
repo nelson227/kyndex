@@ -1,0 +1,27 @@
+metadata:
+  template: kyndex-azure@0.1.0
+  description: Kyndex - Skills Exchange Platform on Azure
+
+services:
+  frontend:
+    project: ./frontend
+    language: ts
+    host: containerapp
+
+  backend:
+    project: ./backend
+    language: ts
+    host: containerapp
+
+infra:
+  bicep:
+    path: ./infra
+  parameters:
+    location: eastus
+    resourceGroupName: kyndex-rg
+    databaseName: kyndex
+    containerRegistryName: kyndexregistry
+    containerAppEnvName: kyndex-env
+    applicationInsightsName: kyndex-ai
+    keyVaultName: kyndex-kv
+    logAnalyticsWorkspaceName: kyndex-logs

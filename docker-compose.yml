@@ -1,0 +1,315 @@
+# Docker Compose Configuration for Kyndex Development
+
+version: '3.9'
+
+services:
+  # ============ DATABASES ============
+
+  # PostgreSQL - Main database
+  db:
+    image: postgres:15-alpine
+    container_name: kyndex-postgres
+    environment:
+      POSTGRES_USER: kyndex_user
+      POSTGRES_PASSWORD: kyndex_password
+      POSTGRES_DB: kyndex_db
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kyndex_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kyndex-network
+
+  # Redis - Cache & Message Queue
+  redis:
+    image: redis:7-alpine
+    container_name: kyndex-redis
+    command: redis-server --appendonly yes --requirepass kyndex_redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kyndex-network
+
+  # ============ MESSAGE QUEUES ============
+
+  # RabbitMQ - Message broker
+  rabbitmq:
+    image: rabbitmq:3.12-alpine
+    container_name: kyndex-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kyndex-network
+
+  # ============ SEARCH & ANALYTICS ============
+
+  # Elasticsearch - Full-text search
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+    container_name: kyndex-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kyndex-network
+
+  # ============ MONITORING ============
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: kyndex-prometheus
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - kyndex-network
+
+  # Grafana - Metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: kyndex-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - kyndex-network
+
+  # Jaeger - Distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: kyndex-jaeger
+    ports:
+      - "6831:6831/udp"  # Jaeger agent
+      - "16686:16686"    # UI
+    networks:
+      - kyndex-network
+
+  # ============ DEVELOPMENT TOOLS ============
+
+  # pgAdmin - PostgreSQL management UI
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: kyndex-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@kyndex.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - kyndex-network
+
+  # Redis Commander - Redis management UI
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: kyndex-redis-commander
+    environment:
+      - REDIS_HOSTS=local:kyndex-redis:6379:0:kyndex_redis_password
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - kyndex-network
+
+  # ============ APPLICATION (Development) ============
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile
+    container_name: kyndex-backend
+    environment:
+      NODE_ENV: development
+      DEBUG: "kyndex:*"
+      LOG_LEVEL: debug
+      PORT: 3000
+      
+      # Database
+      DATABASE_URL: postgresql://kyndex_user:kyndex_password@db:5432/kyndex_db
+      
+      # Redis
+      REDIS_URL: redis://:kyndex_redis_password@redis:6379
+      
+      # RabbitMQ
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+      
+      # Elasticsearch
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      
+      # Auth
+      JWT_SECRET: your-development-secret-key-change-in-production-12345
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_SECRET: your-development-refresh-secret-key-change-in-production-12345
+      
+      # Frontend URL (for CORS)
+      FRONTEND_URL: http://localhost:3001
+      
+      # Monitoring
+      PROMETHEUS_ENABLED: "true"
+      JAEGER_ENABLED: "true"
+      JAEGER_AGENT_HOST: jaeger
+      JAEGER_AGENT_PORT: 6831
+      
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/dist:/app/dist
+    networks:
+      - kyndex-network
+    command: npm run dev
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: kyndex-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+      NEXT_PUBLIC_FRONTEND_URL: http://localhost:3001
+      NEXT_PUBLIC_ENVIRONMENT: development
+    ports:
+      - "3001:3001"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - kyndex-network
+    command: npm run dev
+
+  # ============ MAINTENANCE (Optional) ============
+
+  # Mailhog - Local email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: kyndex-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - kyndex-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  kyndex-network:
+    driver: bridge
+
+# ============ SERVICES REFERENCE ============
+#
+# SERVICE          PORT(s)         URL                           Credentials
+# ────────────────────────────────────────────────────────────────────────────
+# Backend          3000            http://localhost:3000          N/A
+# Frontend         3001            http://localhost:3001          N/A
+# PostgreSQL       5432            localhost:5432                 kyndex_user/kyndex_password
+# pgAdmin          5050            http://localhost:5050          admin@kyndex.com/admin
+# Redis            6379            localhost:6379                 password: kyndex_redis_password
+# Redis UI         8081            http://localhost:8081          N/A
+# RabbitMQ         5672            amqp://localhost:5672          admin/admin
+# RabbitMQ UI      15672           http://localhost:15672         admin/admin
+# Elasticsearch    9200            http://localhost:9200          N/A
+# Prometheus       9090            http://localhost:9090          N/A
+# Grafana          3000*           http://localhost:3000          admin/admin * (conflict with backend)
+# Jaeger           16686           http://localhost:16686         N/A
+# Mailhog          1025/8025       http://localhost:8025          N/A
+#
+# To avoid port conflict, change Grafana port in docker-compose.yml:
+# Change: 3000:3000  →  3002:3000
+
+# ============ USEFUL COMMANDS ============
+#
+# Start all services:
+#   docker-compose up -d
+#
+# Stop all services:
+#   docker-compose down
+#
+# View logs:
+#   docker-compose logs -f backend
+#   docker-compose logs -f frontend
+#
+# Run migrations:
+#   docker-compose exec backend npm run db:migrate:dev
+#
+# Access PostgreSQL:
+#   docker-compose exec db psql -U kyndex_user -d kyndex_db
+#
+# Reset everything:
+#   docker-compose down -v
+#   docker-compose up -d

@@ -1,0 +1,175 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [frontend, backend]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './${{ matrix.service }}/package-lock.json'
+
+      - name: Install dependencies - ${{ matrix.service }}
+        run: |
+          cd ${{ matrix.service }}
+          npm ci
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          cd ${{ matrix.service }}
+          npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Run tests - ${{ matrix.service }}
+        run: |
+          cd ${{ matrix.service }}
+          npm run test --if-present
+        continue-on-error: true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.service }}-build
+          path: ${{ matrix.service }}/
+
+  deploy-dev:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Azure Login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          audience: api://AzureADTokenExchange
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Azure Developer CLI
+        run: curl -fsSL https://aka.ms/install-azd.sh | bash
+
+      - name: AZD Auth
+        run: |
+          azd auth login --use-device-code
+
+      - name: AZD Provision - Dev
+        run: |
+          azd provision --no-prompt
+        env:
+          AZD_SKIP_ENVIRONMENT_SETUP: false
+
+      - name: AZD Deploy - Dev
+        run: |
+          azd deploy --no-prompt
+
+      - name: Get Deployment Outputs
+        run: |
+          azd env get-values > deployment-outputs.txt
+          cat deployment-outputs.txt
+
+      - name: Save Deployment Info
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-info-dev
+          path: deployment-outputs.txt
+
+  deploy-prod:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: prod
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Azure Login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          audience: api://AzureADTokenExchange
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Azure Developer CLI
+        run: curl -fsSL https://aka.ms/install-azd.sh | bash
+
+      - name: AZD Auth
+        run: |
+          azd auth login --use-device-code
+
+      - name: AZD Provision - Prod
+        run: |
+          azd provision --no-prompt
+        env:
+          AZD_SKIP_ENVIRONMENT_SETUP: false
+
+      - name: AZD Deploy - Prod
+        run: |
+          azd deploy --no-prompt
+
+      - name: Get Deployment Outputs
+        run: |
+          azd env get-values > deployment-outputs.txt
+          cat deployment-outputs.txt
+
+      - name: Save Deployment Info
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-info-prod
+          path: deployment-outputs.txt
+
+  notify:
+    needs: [build, deploy-dev, deploy-prod]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment Status
+        run: |
+          echo "Build Status: ${{ needs.build.result }}"
+          echo "Dev Deployment Status: ${{ needs.deploy-dev.result }}"
+          echo "Prod Deployment Status: ${{ needs.deploy-prod.result }}"
