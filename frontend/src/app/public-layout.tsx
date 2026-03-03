@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import { BottomNav } from '@/components/BottomNav';
-import { NavBar } from '@/components/NavBar';
+import NavBar from '@/components/NavBar';
 
 export default function PublicLayout({
   children,
