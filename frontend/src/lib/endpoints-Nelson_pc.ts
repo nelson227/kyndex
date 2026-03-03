@@ -56,4 +56,5 @@ export const API_ENDPOINTS = {
   GET_WALLET: '/wallet',
   ADD_CREDITS: '/wallet/add',
   TRANSFER_CREDITS: '/wallet/transfer',
-} as const;
+};
+

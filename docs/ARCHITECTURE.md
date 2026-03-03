@@ -1,369 +1,325 @@
-# Architecture Details - Kyndex
+# Architecture & Flux de Kyndex
 
-## 1. Flux d'Architecture General
+## 🏗️ Architecture Générale
+
+Kyndex est construite selon une architecture **monolithique modulaire** avec une séparation claire entre backend et frontend.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Client Layer                             │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │ Web (Next.js PWA)  │  Mobile (React Native/Flutter)    │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ HTTPS + WebSocket
-┌────────────────────────▼────────────────────────────────────────┐
-│                     API Gateway Layer                             │
-│  • Authentication Filter                                         │
-│  • Rate Limiting                                                 │
-│  • Request/Response Logging                                      │
-│  • CORS Management                                               │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────────┐
-│                    Business Logic Layer                           │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │ Auth Service   │ User Service   │ Skills Service        │  │
-│  │ Matching Svc   │ Messaging Svc  │ Transaction Service   │  │
-│  │ Reputation Svc │ AI Service     │ Notification Svc      │  │
-│  │ Admin Service  │ Cache Layer    │                       │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────────┐
-│                      Data Layer                                   │
-│  ┌─────────────────────┬──────────────────┬──────────────────┐ │
-│  │   PostgreSQL        │     Redis        │  Elasticsearch   │ │
-│  │  (Source of Truth)  │   (Cache/Queue)  │  (Full-text)     │ │
-│  └─────────────────────┴──────────────────┴──────────────────┘ │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────────┐
-│                    External Services                              │
-│  • Stripe (Payments)  • Firebase (Push)  • OpenAI (AI/LLM)     │
-│  • SendGrid (Email)   • Twilio (SMS)     • Sentry (Monitoring) │
-└───────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                   Frontend (Next.js)                 │
+│  (Browser) Pages → Components → Hooks → API Client  │
+└────────────┬────────────────────────────────────────┘
+             │ (HTTP/REST)
+┌────────────▼────────────────────────────────────────┐
+│              NestJS API Backend (Port 3001)         │
+│  Routes → Controllers → Services → Repository       │
+│                        (Business Logic)              │
+└────────────┬────────────────────────────────────────┘
+             │ (Prisma ORM)
+┌────────────▼────────────────────────────────────────┐
+│         SQLite Database (Dev) / PostgreSQL (Prod)   │
+│              Schema via Prisma Migrations            │
+└──────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Architecture Services - Phase 1 (Monolithe Modulaire)
+## 🔄 Flux Principal : Demande de Service
 
-### Structure Physique
+C'est le flow principal de l'application.
+
+### 1️⃣ Client Crée une Demande
 ```
-backend-app/
-├── src/
-│   ├── modules/
-│   │   ├── auth/
-│   │   │   ├── auth.controller.ts
-│   │   │   ├── auth.service.ts
-│   │   │   ├── auth.module.ts
-│   │   │   └── strategies/
-│   │   ├── users/
-│   │   │   ├── users.controller.ts
-│   │   │   ├── users.service.ts
-│   │   │   └── users.module.ts
-│   │   ├── skills/
-│   │   ├── matching/
-│   │   ├── messaging/
-│   │   ├── transactions/
-│   │   ├── reputation/
-│   │   ├── notifications/
-│   │   ├── ai/
-│   │   └── admin/
-│   ├── common/
-│   │   ├── database/
-│   │   ├── decorators/
-│   │   ├── filters/
-│   │   ├── guards/
-│   │   ├── interceptors/
-│   │   ├── middleware/
-│   │   └── pipes/
-│   ├── config/
-│   ├── types/
-│   └── main.ts
-├── prisma/
-│   └── schema.prisma
-└── test/
+User (CUSTOMER) → Dashboard → "Créer une demande"
+                  ↓
+         ServiceRequest créée
+         Status: OPEN
+         ↓
+      Visible pour les providers
 ```
 
-### Isolation Services
-Chaque service NestJS est isolé par :
-- **Module dédié** : auth.module.ts, users.module.ts, etc.
-- **Exports limités** : Exposer que les entités publiques
-- **Dépendances explicites** : Imports/exports dans modules.ts
-- **Repositories** : Accès data centralisé
+**Données**:
+- title, description
+- budget (optionnel)
+- location, dueDate (optionnels)
+- requiredSkills (optionnel)
 
 ---
 
-## 3. Communication Entre Services
+### 2️⃣ Provider Découvre la Demande
+```
+Provider → Dashboard
+         → Voir les demandes actives
+         → Cliquer sur "Voir demandes"
+         → Modal affiche toutes les demandes
+         → Statut: "NOUVEAU" (rouge), "À_VALIDER" (bleu), "EN_ATTENTE" (jaune)
+```
 
-### Intra-service (Phase 1)
+**Statuts calculés basés sur Bookings existants**:
+- `NOUVEAU` : Aucun booking
+- `À_VALIDER` : Un ou plusieurs bookings en attente d'acceptation
+- `EN_ATTENTE` : Au moins un booking accepté (travail en cours)
+
+---
+
+### 3️⃣ Provider Contacte le Client
+```
+Provider → Clique sur "Voir demandes"
+        → Clique sur une demande
+        → Modal détails s'ouvre
+        → Clique "Contacter"
+        ↓
+  - Si statut NOUVEAU/À_VALIDER:
+      ✅ Bouton "Contacter" activé
+      ✅ Crée une Conversation
+      ✅ Envoie un message initial
+      ✅ Redirige à /messages/{conversationId}
+  
+  - Si statut EN_ATTENTE:
+      ❌ Bouton "Contacter" désactivé
+      ⚠️ Message d'avertissement affiché
+```
+
+---
+
+### 4️⃣ Conversation & Booking
+```
+Client et Provider → Discutent dans /messages
+                  → Client accepte l'offre
+                  → Booking créé
+                  → Status: IN_PROGRESS
+                  ↓
+                  Travail se fait
+                  ↓
+                  Booking completed
+                  ↓
+                  Review & Rating
+```
+
+---
+
+## 🗂️ Modèle de Données
+
+### User
 ```typescript
-// skills.module.ts
-@Module({
-  imports: [TypeOrmModule.forFeature([Skill, UserSkill])],
-  controllers: [SkillsController],
-  providers: [SkillsService],
-  exports: [SkillsService] // Exporté pour matching service
-})
-export class SkillsModule {}
-
-// matching.module.ts
-@Module({
-  imports: [SkillsModule], // Dépend de Skills
-  controllers: [MatchingController],
-  providers: [MatchingService]
-})
-export class MatchingModule {}
+User {
+  id: UUID
+  email: string (unique)
+  passwordHash: string
+  role: string (USER, ADMIN)
+  userType: string (CUSTOMER, PROVIDER, BOTH)
+  status: string (ACTIVE, INACTIVE, BANNED)
+  
+  Relations:
+    profile: Profile (1-to-1)
+    services: Service[] (1-to-many) // Offres de services
+    serviceRequests: ServiceRequest[] (1-to-many) // Demandes créées
+    bookings: Booking[] (1-to-many) // Réservations
+    conversations: ConversationParticipant[] // Chats
+    reviews: Review[] // Avis reçus
+}
 ```
 
-### Inter-service (Phase 2+)
-```
-Services independents
-        │
-        ├─→ Event Bus (RabbitMQ/Kafka)
-        │
-        ├─→ REST APIs internes
-        │
-        └─→ gRPC (calls directs)
-```
-
----
-
-## 4. Data Flow - Matching Process
-
-```
-User Search
-    │
-    ▼
-┌─────────────────────────┐
-│ Matching Service        │
-│ - Get user skills       │
-│ - Get user location     │
-│ - Get reputation score  │
-└────────┬────────────────┘
-         │
-         ├─→ Skills Service (cache)
-         ├─→ User Service (profile)
-         └─→ Search (Elasticsearch)
-                    │
-                    ▼
-         ┌──────────────────────┐
-         │ Scoring Algorithm    │
-         │ skills_sim * 0.5 +   │
-         │ location * 0.3 +     │
-         │ reputation * 0.2     │
-         └──────────┬───────────┘
-                    │
-                    ▼
-         ┌──────────────────────┐
-         │ Results Ranked       │
-         │ + Pagination         │
-         │ + Cache (Redis)      │
-         └──────────┬───────────┘
-                    │
-                    ▼
-              Response API
+### Service
+```typescript
+Service {
+  id: UUID
+  userId: string // Qui offre le service
+  skillId: string
+  categoryId: string
+  
+  title: string
+  description: string
+  basePrice: float
+  priceType: string (HOURLY, FIXED, NEGOTIABLE)
+  
+  location: string
+  onsite: boolean
+  remote: boolean
+  
+  status: string (ACTIVE, INACTIVE, ARCHIVED)
+  isVerified: boolean
+  
+  averageRating: float
+  totalBookings: int
+  totalReviews: int
+}
 ```
 
----
-
-## 5. Real-time Architecture (Messaging)
-
-```
-Client (Web/Mobile)
-    │
-    ├─→ WebSocket Connection (Socket.io)
-    │
-    ▼
-┌─────────────────────────┐
-│ Socket.io Server        │
-│ - Connection manager    │
-│ - Room management       │
-│ - Event broadcasting    │
-└────────────┬────────────┘
-             │
-             ├─→ Redis Adapter (multi-server)
-             │
-             └─→ Messaging Service
-                    │
-                    ├─→ Store to PostgreSQL
-                    ├─→ Update cache
-                    └─→ Broadcast to other clients
+### ServiceRequest
+```typescript
+ServiceRequest {
+  id: UUID
+  customerId: string // Qui demande
+  serviceId: string? // Service lié (optionnel)
+  
+  title: string
+  description: string
+  budget: float?
+  currency: string
+  
+  requiredSkills: string? // Comma-separated
+  location: string?
+  dueDate: DateTime?
+  
+  status: string (OPEN, IN_PROGRESS, COMPLETED, CANCELLED)
+  statusForProvider: computed // NOUVEAU, À_VALIDER, EN_ATTENTE
+}
 ```
 
----
-
-## 6. Payment & Credit Flow
-
+### Booking
+```typescript
+Booking {
+  id: UUID
+  customerId: string
+  providerId: string
+  serviceId: string? // Service proposé
+  serviceRequestId: string? // Pour quelle demande
+  
+  status: string (PENDING, ACCEPTED, COMPLETED, CANCELLED)
+  totalPrice: float
+  
+  conversations: Message[]
+  reviews: Review[]
+}
 ```
-User initiates transaction
-         │
-         ▼
-┌──────────────────────┐
-│ Transaction Service  │
-└────────┬─────────────┘
-         │
-    ┌────┴────┐
-    │          │
-    ▼          ▼
-Stripe       Internal
-Payment      Credits
-    │          │
-    ├─→────────┤
-           │
-           ▼
-    ┌──────────────────────┐
-    │ Ledger (append-only) │
-    │ - Immutable records  │
-    │ - Audit trail       │
-    └────────┬─────────────┘
-             │
-             ▼
-    ┌──────────────────────┐
-    │ Credit Wallet        │
-    │ - User balance       │
-    │ - Cache in Redis     │
-    └──────────────────────┘
+
+### Conversation
+```typescript
+Conversation {
+  id: UUID
+  participants: ConversationParticipant[] // 2+ users
+  messages: Message[]
+}
+```
+
+### Message
+```typescript
+Message {
+  id: UUID
+  conversationId: string
+  senderId: string
+  content: string
+  createdAt: DateTime
+}
 ```
 
 ---
 
-## 7. AI Layer Integration
+## 🔌 API Endpoints Clés
+
+### Auth
+- `POST /api/v1/auth/register` - Créer un compte
+- `POST /api/v1/auth/login` - Se connecter
+- `POST /api/v1/auth/refresh` - Refresh token
+- `POST /api/v1/auth/logout` - Se déconnecter
+
+### Profile
+- `GET /api/v1/profile/me` - Mon profil
+- `PUT /api/v1/profile/me` - Mettre à jour mon profil
+- `POST /api/v1/profile/complete-setup` - Completer le setup
+
+### Services Requests (NEW)
+- `GET /api/v1/service-requests` - Lister toutes les demandes
+- `GET /api/v1/service-requests/:id` - Détails d'une demande
+- `POST /api/v1/service-requests` - Créer une demande
+- `POST /api/v1/service-requests/:id/apply` - Répondre à une demande
+
+### Services
+- `GET /api/v1/services` - Lister mes services
+- `POST /api/v1/services` - Créer un service
+- `PUT /api/v1/services/:id` - Mettre à jour un service
+- `DELETE /api/v1/services/:id` - Supprimer un service
+
+### Messaging
+- `GET /api/v1/messages/conversations` - Mes conversations
+- `POST /api/v1/messages/conversations` - Créer une conversation
+- `POST /api/v1/messages/conversations/:id/messages` - Envoyer un message
+- `GET /api/v1/messages/conversations/:id/messages` - Lire les messages
+
+---
+
+## 📱 Frontend Pages
+
+### Auth Flow
+- `/` → Home (public)
+- `/auth/login` - Login
+- `/auth/register` - Register
+
+### Onboarding
+- `/onboarding` - Setup du profil
+
+### Application
+- `/dashboard` - Accueil (demandes de services)
+- `/discover` - Découvrir les services
+- `/profile` - Mon profil
+- `/messages/:conversationId` - Conversations
+- `/services` - Gestion de mes services
+
+---
+
+## 🔐 Authentication Flow
 
 ```
-┌────────────────────────────────────┐
-│ AI Service (NestJS Module)         │
-└────────────┬───────────────────────┘
-             │
-    ┌────────┼────────┬──────────────┐
-    │        │        │              │
-    ▼        ▼        ▼              ▼
-Profile   Service  Message      Fraud
-NLP       Value    Moderation   Detection
-Extraction Estimation (Toxicity) (Classification)
-    │        │        │              │
-    └────────┼────────┼──────────────┘
-             │
-             ▼
-    ┌──────────────────────┐
-    │ External LLM API     │
-    │ (OpenAI / Local)     │
-    └──────────────────────┘
+1. User -> /auth/register
+   ↓
+2. POST /auth/register { email, password }
+   ↓
+3. Network -> Backend créé User + hash password
+   ↓
+4. Frontend localStorage reçoit JWT + refreshToken
+   ↓
+5. Chaque requête inclut Authorization: Bearer {JWT}
+   ↓
+6. Backend valide JWT avec JwtAuthGuard
+   ↓
+7. Si JWT expiré (15min):
+   - Axios interceptor détecte 401
+   - POST /auth/refresh { refreshToken }
+   - Token refreshifié
+   - Requête réessayée
+   ↓
+8. Si refreshToken expiré (7 jours):
+   - Redirection vers /auth/login
 ```
 
 ---
 
-## 8. Security Layers
-
-### Layer 1: Network
-- HTTPS/TLS 1.3
-- API Gateway rate limiting
-- WAF (CloudFlare)
-
-### Layer 2: Application
-- JWT verification
-- OAuth2 authorization
-- API key validation
-
-### Layer 3: Backend
-- Role-Based Access Control (RBAC)
-- Row-Level Security (RLS) en DB
-- Input validation (Zod)
-- SQL injection prevention (Prisma)
-
-### Layer 4: Data
-- Encryption at rest (sensitive data)
-- Encryption in transit
-- Regular backups
-- RGPD compliance tools
-
----
-
-## 9. Caching Strategy
+## 🚀 Cycle de Déploiement
 
 ```
-Request
-  │
-  ├─→ Check Redis
-  │        │
-  │   Hit? ├─→ Return (fast)
-  │        │
-  │        └─→ Miss
-  │            │
-  │            ▼
-  │    PostgreSQL/ES
-  │            │
-  │            ├─→ Process
-  │            │
-  │            ├─→ Store Redis
-  │            │   (TTL: 30m-24h)
-  │            │
-  │            └─→ Return
-  │
-  └─→ Response
-```
-
-**Cache Keys Pattern**
-- `user:{userId}` - User data
-- `skills:{skillId}` - Skill info
-- `matching:batch:{batchId}` - Matching results
-- `messages:{conversationId}` - Recent messages
-
----
-
-## 10. Scalability Points
-
-### Horizontal Scaling
-- **API Servers** : Stateless (easy scaling)
-- **Load Balancer** : Nginx/AWS ALB
-- **Database** : Master-replica (read replicas)
-- **Cache** : Redis Cluster
-
-### Vertical Points (bottleneck watch)
-- **Database writes** : Monolithic access
-- **AI processing** : CPU-intensive
-- **Real-time broadcast** : Memory usage
-
-### Future: Microservices
-```
-Phase 1              Phase 2+
-Monolith       →    Messaging Service (separate)
-                    AI Service (separate)
-                    Notification Service (separate)
-                    (Event streaming connection)
+Code → Git Push
+     ↓
+GitHub → Actions (CI/CD)
+      ↓
+Tests → Build → Deploy
+      ↓
+Frontend: Vercel (auto)
+Backend: Docker → Registry → Deploy
 ```
 
 ---
 
-## 11. Disaster Recovery
+## 📊 Métriques de Performance
 
-- **Backup Strategy** : Daily snapshots PostgreSQL
-- **Replication** : Multi-AZ RDS
-- **Failover** : Automatic (< 5 min)
-- **Monitoring** : Alerting on critical metrics
-- **SLA** : 99.99% uptime target
+### Cibles
+- **Frontend Load Time** : < 2s
+- **API Response Time** : < 200ms (p95)
+- **Database Query Time** : < 100ms (p95)
+- **Uptime Target** : 99.9%
 
----
-
-## 12. Development Environments
-
-```
-Local Development
-├─ Docker Compose (all services)
-├─ .env.local with fake credentials
-└─ localhost:3000
-
-Dev Environment
-├─ Same as production (smaller scale)
-├─ Real databases
-└─ Staging OAuth/Stripe keys
-
-Production
-├─ Multi-region deployment
-├─ Managed services (RDS, ElastiCache)
-└─ Production credentials (Vault)
-```
+### Monitoring
+- Console logs en dev
+- Structures logs en prod (à implémenter)
 
 ---
 
-**Dernière mise à jour** : 27 février 2026
+## 🔜 Améliorations Futures
+
+- [ ] Notifications temps réel (Socket.io)
+- [ ] Système de badges
+- [ ] Matching basé sur l'IA
+- [ ] Intégration Stripe
+- [ ] App mobile (React Native)
+- [ ] Multi-langue
+- [ ] Dark mode

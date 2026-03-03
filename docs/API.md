@@ -1,870 +1,499 @@
 # API Documentation - Kyndex
 
-## Overview
+API Base URL: `http://localhost:3001/api/v1`
 
-- **Base URL** : `https://api.kyndex.com/v1`
-- **Authentication** : Bearer Token (JWT)
-- **Content-Type** : `application/json`
-- **Rate Limit** : 100 requests/minute per user
+**Documentation Interactive**: http://localhost:3001/api-docs (Swagger UI)
 
 ---
 
-## Authentication Endpoints
+## 🔐 Authentification
 
-### POST /auth/register
-**Description** : Créer un nouveau compte utilisateur
+### POST `/auth/register`
+Créer un nouveau compte utilisateur.
 
-**Request**
+**Body:**
 ```json
 {
   "email": "user@example.com",
-  "password": "securePassword123",
-  "name": "John Doe",
-  "language": "en"
+  "password": "SecurePassword123!"
 }
 ```
 
-**Response** (201)
+**Response:** 201
 ```json
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
+  "id": "uuid",
+  "email": "user@example.com",
+  "accessToken": "jwt_token",
+  "refreshToken": "refresh_token"
+}
+```
+
+---
+
+### POST `/auth/login`
+Se connecter avec email et password.
+
+**Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!"
+}
+```
+
+**Response:** 200
+```json
+{
+  "accessToken": "jwt_token",
+  "refreshToken": "refresh_token",
   "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "id": "uuid",
+    "email": "user@example.com"
+  }
+}
+```
+
+---
+
+### POST `/auth/refresh`
+Renouveler le JWT token avec le refresh token.
+
+**Body:**
+```json
+{
+  "refreshToken": "refresh_token"
+}
+```
+
+**Response:** 200
+```json
+{
+  "accessToken": "new_jwt_token"
+}
+```
+
+---
+
+### POST `/auth/logout`
+Se déconnecter (invalide le refresh token).
+
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Response:** 200
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
+---
+
+## 👤 Profil
+
+### GET `/profile/me`
+Récupérer mon profil.
+
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Response:** 200
+```json
+{
+  "user": {
+    "id": "uuid",
     "email": "user@example.com",
-    "name": "John Doe",
-    "role": "user"
-  }
-}
-```
-
----
-
-### POST /auth/login
-**Description** : Se connecter avec email/password
-
-**Request**
-```json
-{
-  "email": "user@example.com",
-  "password": "securePassword123"
-}
-```
-
-**Response** (200)
-```json
-{
-  "accessToken": "...",
-  "refreshToken": "...",
-  "user": { ... }
-}
-```
-
----
-
-### POST /auth/oauth/google
-**Description** : Se connecter avec Google OAuth
-
-**Request**
-```json
-{
-  "idToken": "Google ID token"
-}
-```
-
-**Response** (200)
-```json
-{
-  "accessToken": "...",
-  "refreshToken": "...",
-  "user": { ... }
-}
-```
-
----
-
-### POST /auth/oauth/github
-**Description** : Se connecter avec GitHub OAuth
-
-**Request**
-```json
-{
-  "code": "Authorization code from GitHub"
-}
-```
-
-**Response** (200)
-```json
-{
-  "accessToken": "...",
-  "refreshToken": "...",
-  "user": { ... }
-}
-```
-
----
-
-### POST /auth/2fa/enable
-**Description** : Activer 2FA (TOTP)
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Response** (200)
-```json
-{
-  "secret": "JBSWY3DPEBLW64TMMQ======",
-  "qrCode": "data:image/png;base64,...",
-  "message": "Scan with authenticator app"
-}
-```
-
----
-
-### POST /auth/2fa/verify
-**Description** : Vérifier code 2FA
-
-**Request**
-```json
-{
-  "code": "123456"
-}
-```
-
-**Response** (200)
-```json
-{
-  "verified": true,
-  "backupCodes": ["backup1", "backup2", ...]
-}
-```
-
----
-
-### POST /auth/refresh
-**Description** : Renouveler access token
-
-**Request**
-```json
-{
-  "refreshToken": "..."
-}
-```
-
-**Response** (200)
-```json
-{
-  "accessToken": "..."
-}
-```
-
----
-
-## User Endpoints
-
-### GET /users/me
-**Description** : Récupérer profil utilisateur actuel
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Response** (200)
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "email": "user@example.com",
-  "name": "John Doe",
-  "role": "user",
-  "reputationScore": 4.8,
-  "profile": {
-    "bio": "Développeur passionné",
-    "location": "Paris, France",
-    "languages": ["fr", "en"],
-    "availability": "weekends",
-    "avatar": "https://..."
+    "role": "USER",
+    "userType": "BOTH"
   },
-  "createdAt": "2026-01-15T10:30:00Z"
-}
-```
-
----
-
-### GET /users/{userId}
-**Description** : Récupérer profil utilisateur public
-
-**Response** (200)
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "John Doe",
-  "reputationScore": 4.8,
   "profile": {
-    "bio": "Développeur passionné",
-    "location": "Paris, France",
-    "languages": ["fr", "en"],
-    "avatar": "https://..."
+    "id": "uuid",
+    "firstName": "John",
+    "lastName": "Doe",
+    "bio": "I'm a developer",
+    "city": "Paris",
+    "avatarUrl": "https://...",
+    "averageRating": 4.5,
+    "totalReviews": 12
   }
 }
 ```
 
 ---
 
-### PATCH /users/me
-**Description** : Mettre à jour profil utilisateur
+### PUT `/profile/me`
+Mettre à jour mon profil.
 
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
+**Headers:** `Authorization: Bearer {JWT}`
 
-**Request**
+**Body:**
 ```json
 {
-  "name": "Jane Doe",
-  "profile": {
-    "bio": "Designer créatif",
-    "location": "Lyon, France",
-    "languages": ["fr", "en", "es"],
-    "availability": "flexible"
-  }
+  "firstName": "John",
+  "lastName": "Doe",
+  "bio": "I'm a developer",
+  "city": "Paris",
+  "location": "Paris, France"
 }
 ```
 
-**Response** (200)
+**Response:** 200 (profile updated)
+
+---
+
+### POST `/profile/complete-setup`
+Marquer le profil comme complété (end of onboarding).
+
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Response:** 200
 ```json
 {
-  "id": "...",
-  "name": "Jane Doe",
-  "profile": { ... },
-  "updatedAt": "2026-02-27T15:45:00Z"
+  "isProfileComplete": true
 }
 ```
 
 ---
 
-### PATCH /users/me/password
-**Description** : Changer mot de passe
+## 📋 Demandes de Services
 
-**Request**
+### GET `/service-requests`
+Lister toutes les demandes de services.
+
+**Query Parameters:**
+- `status` (optionnel) : OPEN, IN_PROGRESS, COMPLETED
+- `limit` (default: 50)
+- `offset` (default: 0)
+
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Response:** 200
 ```json
-{
-  "currentPassword": "oldPassword123",
-  "newPassword": "newPassword456"
-}
-```
-
-**Response** (200)
-```json
-{
-  "message": "Password updated successfully"
-}
-```
-
----
-
-## Skills Endpoints
-
-### GET /skills
-**Description** : Lister toutes les compétences
-
-**Query Parameters**
-- `category` (optional) : Filtrer par catégorie
-- `search` (optional) : Recherche texte
-- `limit` (default: 20) : Pagination
-- `offset` (default: 0) : Pagination
-
-**Response** (200)
-```json
-{
-  "data": [
-    {
+[
+  {
+    "id": "uuid",
+    "title": "Need a web developer",
+    "description": "Build a React app for my startup",
+    "budget": 5000,
+    "currency": "EUR",
+    "location": "Paris",
+    "dueDate": "2026-03-20T00:00:00Z",
+    "requiredSkills": "React,Node.js,PostgreSQL",
+    "status": "OPEN",
+    "statusForProvider": "NOUVEAU",
+    "customer": {
       "id": "uuid",
-      "name": "Python",
-      "category": "programming",
-      "level": 3,
-      "endorsements": 42
+      "email": "client@example.com",
+      "profile": {
+        "firstName": "Jane",
+        "lastName": "Doe",
+        "city": "Paris",
+        "avatarUrl": "https://..."
+      }
     },
-    {
-      "id": "uuid",
-      "name": "Web Design",
-      "category": "design",
-      "level": 4
-    }
-  ],
-  "total": 1250,
-  "limit": 20,
-  "offset": 0
-}
+    "bookings": [],
+    "createdAt": "2026-03-01T10:00:00Z"
+  }
+]
 ```
 
 ---
 
-### GET /skills/search
-**Description** : Recherche full-text compétences
+### GET `/service-requests/:id`
+Récupérer les détails d'une demande spécifique.
 
-**Query Parameters**
-- `q` (required) : Terme recherche
-- `limit` (default: 10)
+**Headers:** `Authorization: Bearer {JWT}`
 
-**Response** (200)
-```json
-{
-  "results": [
-    {
-      "id": "uuid",
-      "name": "Python Developer",
-      "category": "programming",
-      "relevance": 0.95
-    }
-  ]
-}
-```
+**Response:** 200 (same as above single item)
 
 ---
 
-### POST /skills
-**Description** : Créer compétence personnalisée
+### POST `/service-requests`
+Créer une nouvelle demande de service.
 
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
+**Headers:** `Authorization: Bearer {JWT}`
 
-**Request**
+**Body:**
 ```json
 {
-  "name": "Photographie de produit",
-  "category": "photography",
-  "level": 4
+  "title": "Need a web developer",
+  "description": "Build a React app for my startup",
+  "budget": 5000,
+  "currency": "EUR",
+  "location": "Paris",
+  "dueDate": "2026-03-20T00:00:00Z",
+  "requiredSkills": "React,Node.js,PostgreSQL"
 }
 ```
 
-**Response** (201)
+**Response:** 201
 ```json
 {
   "id": "uuid",
-  "name": "Photographie de produit",
-  "category": "photography",
-  "createdAt": "2026-02-27T15:45:00Z"
+  "title": "Need a web developer",
+  // ... full request object
 }
 ```
 
 ---
 
-### GET /users/me/skills
-**Description** : Récupérer skills de l'utilisateur
+### POST `/service-requests/:id/apply`
+Répondre à une demande (créer un booking comme provider).
 
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
+**Headers:** `Authorization: Bearer {JWT}`
 
-**Response** (200)
+**Body:**
 ```json
 {
-  "offered": [
-    {
-      "skillId": "uuid",
-      "name": "Python",
-      "category": "programming",
-      "level": 5,
-      "type": "offered"
-    }
-  ],
-  "wanted": [
-    {
-      "skillId": "uuid",
-      "name": "UI Design",
-      "category": "design",
-      "level": 2,
-      "type": "wanted"
-    }
-  ]
+  "serviceId": "uuid-optionnel",
+  "message": "I can help with this project"
+}
+```
+
+**Response:** 201
+```json
+{
+  "id": "booking-uuid",
+  "status": "PENDING",
+  "serviceRequestId": "uuid",
+  "customerId": "uuid",
+  "providerId": "uuid",
+  "totalPrice": 0,
+  "createdAt": "2026-03-01T10:00:00Z"
 }
 ```
 
 ---
 
-### POST /users/me/skills/{skillId}
-**Description** : Ajouter compétence (offered ou wanted)
+## 💬 Messaging
 
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
+### GET `/messages/conversations`
+Lister mes conversations.
 
-**Request**
-```json
-{
-  "type": "offered",
-  "level": 4
-}
-```
+**Headers:** `Authorization: Bearer {JWT}`
 
-**Response** (201)
-```json
-{
-  "userId": "uuid",
-  "skillId": "uuid",
-  "type": "offered",
-  "level": 4,
-  "addedAt": "2026-02-27T15:45:00Z"
-}
-```
-
----
-
-## Matching Endpoints
-
-### GET /matching/recommendations
-**Description** : Récupérer recommendations de skills matching
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Query Parameters**
-- `limit` (default: 20)
-- `offset` (default: 0)
-- `filters` (optional) : JSON filters
-
-**Response** (200)
-```json
-{
-  "matches": [
-    {
-      "userId": "uuid",
-      "name": "Jane Smith",
-      "matchScore": 0.87,
-      "matchReason": "Expert Python, besoin UI Design",
-      "commonSkills": ["Web Development"],
-      "location": "Paris, France",
-      "reputationScore": 4.6,
-      "avatar": "https://..."
-    }
-  ],
-  "total": 145,
-  "limit": 20,
-  "offset": 0
-}
-```
-
----
-
-### POST /matching/batch
-**Description** : Lancer matching batch (admin)
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Request**
-```json
-{
-  "strategy": "skills_proximity",
-  "includeNewUsers": true
-}
-```
-
-**Response** (202)
-```json
-{
-  "batchId": "uuid",
-  "status": "processing",
-  "timestamp": "2026-02-27T15:45:00Z"
-}
-```
-
----
-
-## Messaging Endpoints
-
-### GET /conversations
-**Description** : Lister conversations utilisateur
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Query Parameters**
-- `limit` (default: 20)
-- `offset` (default: 0)
-- `search` (optional)
-
-**Response** (200)
-```json
-{
-  "conversations": [
-    {
-      "id": "uuid",
-      "participantIds": ["uuid1", "uuid2"],
-      "lastMessage": {
-        "id": "uuid",
-        "content": "Thanks for your help!",
-        "createdAt": "2026-02-27T14:30:00Z"
-      },
-      "unreadCount": 0,
-      "createdAt": "2026-02-15T10:00:00Z"
-    }
-  ],
-  "total": 5
-}
-```
-
----
-
-### POST /conversations
-**Description** : Créer conversation
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Request**
-```json
-{
-  "participantId": "uuid",
-  "initialMessage": "Hi, I'd like to learn Python from you"
-}
-```
-
-**Response** (201)
-```json
-{
-  "id": "uuid",
-  "participantIds": ["currentUserId", "uuid"],
-  "createdAt": "2026-02-27T15:45:00Z"
-}
-```
-
----
-
-### GET /conversations/{conversationId}/messages
-**Description** : Récupérer messages d'une conversation
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Query Parameters**
-- `limit` (default: 20)
+**Query Parameters:**
+- `limit` (default: 50)
 - `offset` (default: 0)
 
-**Response** (200)
+**Response:** 200
+```json
+[
+  {
+    "id": "uuid",
+    "title": null,
+    "participants": [
+      {
+        "userId": "uuid",
+        "user": {
+          "profile": {
+            "firstName": "John"
+          }
+        },
+        "joinedAt": "2026-03-01T10:00:00Z"
+      }
+    ],
+    "lastMessage": {
+      "content": "Hi, are you available?",
+      "createdAt": "2026-03-01T11:00:00Z"
+    }
+  }
+]
+```
+
+---
+
+### POST `/messages/conversations`
+Créer une nouvelle conversation.
+
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Body:**
 ```json
 {
-  "messages": [
-    {
-      "id": "uuid",
-      "conversationId": "uuid",
-      "senderId": "uuid",
-      "content": "Hi there!",
-      "attachments": [],
-      "createdAt": "2026-02-27T15:45:00Z",
-      "updatedAt": "2026-02-27T15:45:00Z"
-    }
-  ],
-  "total": 42
+  "otherUserId": "uuid"
+}
+```
+
+**Response:** 201
+```json
+{
+  "id": "conversation-uuid",
+  "participants": []
 }
 ```
 
 ---
 
-### POST /conversations/{conversationId}/messages
-**Description** : Envoyer un message
+### GET `/messages/conversations/:conversationId/messages`
+Récupérer les messages d'une conversation.
 
-**Headers**
-```
-Authorization: Bearer <accessToken>
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Query Parameters:**
+- `limit` (default: 50)
+- `offset` (default: 0)
+
+**Response:** 200
+```json
+[
+  {
+    "id": "message-uuid",
+    "content": "Hi, are you available?",
+    "sender": {
+      "profile": {
+        "firstName": "John"
+      }
+    },
+    "createdAt": "2026-03-01T11:00:00Z"
+  }
+]
 ```
 
-**Request**
+---
+
+### POST `/messages/conversations/:conversationId/messages`
+Envoyer un message.
+
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Body:**
 ```json
 {
-  "content": "Thank you for your help!",
-  "attachments": []
+  "content": "Yes, I'm available. When do you want to start?"
 }
 ```
 
-**Response** (201)
+**Response:** 201
 ```json
 {
-  "id": "uuid",
-  "content": "Thank you for your help!",
+  "id": "message-uuid",
+  "content": "Yes, I'm available...",
   "senderId": "uuid",
-  "createdAt": "2026-02-27T15:47:00Z"
+  "conversationId": "uuid",
+  "createdAt": "2026-03-01T11:05:00Z"
 }
 ```
 
 ---
 
-### WebSocket /messages/stream
-**Description** : Real-time messaging stream
+## 📚 Services
 
-**Connection**
-```javascript
-const socket = io('https://api.kyndex.com', {
-  auth: { token: accessToken }
-});
+### GET `/services`
+Lister mes services.
 
-socket.on('message:new', (msg) => { ... });
-socket.emit('message:send', { conversationId, content });
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Response:** 200
+```json
+[
+  {
+    "id": "service-uuid",
+    "userId": "uuid",
+    "title": "Full Stack Development",
+    "description": "Build web apps with React & Node.js",
+    "basePrice": 100,
+    "priceType": "HOURLY",
+    "currency": "EUR",
+    "location": "Paris",
+    "remote": true,
+    "onsite": false,
+    "status": "ACTIVE",
+    "averageRating": 4.8,
+    "totalBookings": 5
+  }
+]
 ```
 
 ---
 
-## Transaction Endpoints
+### POST `/services`
+Créer un nouveau service.
 
-### POST /transactions
-**Description** : Créer transaction
+**Headers:** `Authorization: Bearer {JWT}`
 
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Request**
+**Body:**
 ```json
 {
-  "type": "hybrid",
-  "amount": 50,
-  "toUserId": "uuid",
-  "description": "Web development service"
+  "skillId": "uuid",
+  "categoryId": "uuid",
+  "title": "Full Stack Development",
+  "description": "Build web apps",
+  "basePrice": 100,
+  "priceType": "HOURLY",
+  "location": "Paris",
+  "remote": true,
+  "onsite": false
 }
 ```
 
-**Response** (201)
+**Response:** 201
+
+---
+
+### PUT `/services/:id`
+Mettre à jour un service.
+
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Body:** (même structure que POST)
+
+**Response:** 200
+
+---
+
+### DELETE `/services/:id`
+Supprimer un service.
+
+**Headers:** `Authorization: Bearer {JWT}`
+
+**Response:** 200
+
+---
+
+## 📂 Catégories
+
+### GET `/categories`
+Lister toutes les catégories de services.
+
+**Response:** 200
 ```json
-{
-  "id": "uuid",
-  "type": "hybrid",
-  "status": "pending",
-  "amount": 50,
-  "fromUserId": "uuid",
-  "toUserId": "uuid",
-  "createdAt": "2026-02-27T15:45:00Z"
-}
+[
+  {
+    "id": "uuid",
+    "name": "Web Development",
+    "slug": "web-development",
+    "icon": "code"
+  }
+]
 ```
 
 ---
 
-### GET /transactions
-**Description** : Historique transactions utilisateur
+## ❌ Erreurs Courantes
 
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Query Parameters**
-- `status` (optional) : pending, completed, failed
-- `limit` (default: 20)
-- `offset` (default: 0)
-
-**Response** (200)
+### 401 Unauthorized
 ```json
 {
-  "transactions": [
-    {
-      "id": "uuid",
-      "type": "hybrid",
-      "status": "completed",
-      "amount": 50,
-      "direction": "sent",
-      "otherUserId": "uuid",
-      "otherUserName": "Jane Smith",
-      "completedAt": "2026-02-26T10:30:00Z"
-    }
-  ],
-  "total": 12
+  "statusCode": 401,
+  "message": "Unauthorized"
+}
+```
+**Action**: Utiliser le `refreshToken` pour obtenir un nouveau JWT.
+
+### 404 Not Found
+```json
+{
+  "statusCode": 404,
+  "message": "Resource not found"
 }
 ```
 
----
-
-## Wallet/Credits Endpoints
-
-### GET /wallet
-**Description** : Récupérer solde crédit wallet
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Response** (200)
+### 422 Unprocessable Entity (Validation Error)
 ```json
 {
-  "userId": "uuid",
-  "balance": 250,
-  "currency": "KYNDEX_CREDITS",
-  "lastUpdated": "2026-02-27T15:45:00Z"
-}
-```
-
----
-
-### POST /credits/transfer
-**Description** : Transférer crédits
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Request**
-```json
-{
-  "toUserId": "uuid",
-  "amount": 50,
-  "message": "Thanks for your help"
-}
-```
-
-**Response** (201)
-```json
-{
-  "id": "uuid",
-  "fromUserId": "uuid",
-  "toUserId": "uuid",
-  "amount": 50,
-  "status": "completed",
-  "completedAt": "2026-02-27T15:47:00Z"
-}
-```
-
----
-
-## Reviews Endpoints
-
-### POST /reviews
-**Description** : Créer review/rating
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Request**
-```json
-{
-  "toUserId": "uuid",
-  "rating": 5,
-  "comment": "Excellent service! Highly recommended.",
-  "category": "communication"
-}
-```
-
-**Response** (201)
-```json
-{
-  "id": "uuid",
-  "fromUserId": "uuid",
-  "toUserId": "uuid",
-  "rating": 5,
-  "comment": "Excellent service!",
-  "createdAt": "2026-02-27T15:47:00Z"
-}
-```
-
----
-
-### GET /users/{userId}/reviews
-**Description** : Récupérer reviews d'un utilisateur
-
-**Response** (200)
-```json
-{
-  "reviews": [
-    {
-      "id": "uuid",
-      "fromUser": {
-        "id": "uuid",
-        "name": "John Doe"
-      },
-      "rating": 5,
-      "comment": "Great collaboration!",
-      "createdAt": "2026-02-20T10:00:00Z"
-    }
-  ],
-  "averageRating": 4.7,
-  "total": 15
-}
-```
-
----
-
-## Admin Endpoints
-
-### GET /admin/reports
-**Description** : Lister user reports (admin only)
-
-**Headers**
-```
-Authorization: Bearer <accessToken>
-```
-
-**Response** (200)
-```json
-{
-  "reports": [
-    {
-      "id": "uuid",
-      "reportedUserId": "uuid",
-      "reportedByUserId": "uuid",
-      "reason": "inappropriate_content",
-      "description": "Offensive language",
-      "status": "pending",
-      "createdAt": "2026-02-27T15:45:00Z"
-    }
-  ],
-  "total": 3
-}
-```
-
----
-
-### POST /admin/users/{userId}/ban
-**Description** : Bannir utilisateur (admin)
-
-**Request**
-```json
-{
-  "reason": "violation_terms",
-  "duration": "permanent"
-}
-```
-
-**Response** (200)
-```json
-{
-  "userId": "uuid",
-  "status": "banned",
-  "reason": "violation_terms",
-  "bannedAt": "2026-02-27T15:47:00Z"
-}
-```
-
----
-
-## Error Responses
-
-### 400 Bad Request
-```json
-{
-  "statusCode": 400,
-  "error": "Bad Request",
+  "statusCode": 422,
   "message": "Validation failed",
-  "details": [
+  "errors": [
     {
       "field": "email",
       "message": "Invalid email format"
@@ -873,53 +502,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-### 401 Unauthorized
-```json
-{
-  "statusCode": 401,
-  "error": "Unauthorized",
-  "message": "Invalid or expired token"
-}
-```
-
-### 403 Forbidden
-```json
-{
-  "statusCode": 403,
-  "error": "Forbidden",
-  "message": "You don't have permission for this resource"
-}
-```
-
-### 404 Not Found
-```json
-{
-  "statusCode": 404,
-  "error": "Not Found",
-  "message": "User not found"
-}
-```
-
-### 429 Too Many Requests
-```json
-{
-  "statusCode": 429,
-  "error": "Too Many Requests",
-  "message": "Rate limit exceeded",
-  "retryAfter": 60
-}
-```
-
-### 500 Internal Server Error
-```json
-{
-  "statusCode": 500,
-  "error": "Internal Server Error",
-  "message": "An unexpected error occurred",
-  "requestId": "uuid"
-}
-```
-
 ---
 
-**Dernière mise à jour** : 27 février 2026
+**API Version**: v1  
+**Last Updated**: 3 mars 2026

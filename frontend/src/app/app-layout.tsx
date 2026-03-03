@@ -15,7 +15,7 @@ export default function AppLayout({
 
   useEffect(() => {
     if (isInitialized && !user) {
-      router.push('/auth/login');
+      router.push('/');
     }
   }, [isInitialized, user, router]);
 

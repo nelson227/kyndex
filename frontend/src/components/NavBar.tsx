@@ -40,10 +40,10 @@ const NavBar: FC<NavBarProps> = ({ isAuthenticated, userName }) => {
             </>
           ) : (
             <>
-              <Link href="/auth/login" className="text-gray-700 font-medium hover:text-blue-600 transition">
+              <Link href="/" className="text-gray-700 font-medium hover:text-blue-600 transition">
                 Connexion
               </Link>
-              <Link href="/auth/register" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition">
+              <Link href="/" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition">
                 Inscription
               </Link>
             </>

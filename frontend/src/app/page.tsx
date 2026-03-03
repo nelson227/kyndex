@@ -1,477 +1,1538 @@
 'use client';
 
-import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Check, ArrowRight, Sparkles, X } from 'lucide-react';
+import { getUserStorage, setUserStorage } from '@/lib/user-storage';
+import axios from 'axios';
+import { API_ENDPOINTS } from '@/lib/endpoints';
+import { createApiClient } from '@/lib/api-client';
 
-const FEATURED_SKILLS = [
-  { name: 'Développement', icon: '💻', count: '2,450+', color: 'from-blue-500 to-cyan-500' },
-  { name: 'Design', icon: '🎨', count: '1,890+', color: 'from-purple-500 to-pink-500' },
-  { name: 'Marketing', icon: '📱', count: '1,620+', color: 'from-orange-500 to-red-500' },
-  { name: 'Rédaction', icon: '✍️', count: '980+', color: 'from-green-500 to-emerald-500' },
-  { name: 'Coaching', icon: '⭐', count: '1,450+', color: 'from-indigo-500 to-blue-500' },
-  { name: 'Formation', icon: '🎓', count: '1,230+', color: 'from-yellow-500 to-orange-500' },
-];
+/**
+ * Gère le sessionId pour les utilisateurs non connectés
+ * Génère un ID temporaire pour isoler les données entre sessions
+ */
+const getSessionId = (): string => {
+  if (typeof window === 'undefined') return '';
+  
+  let sessionId = sessionStorage.getItem('kyndex_sessionId');
+  if (!sessionId) {
+    sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    sessionStorage.setItem('kyndex_sessionId', sessionId);
+  }
+  return sessionId;
+};
 
-const TESTIMONIALS = [
+/**
+ * Sauvegarde les données de demande (brief, services, need)
+ * Utilise userId si connecté, sinon sessionId temporaire
+ */
+const saveDraftData = (dataKey: string, data: any): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    // Essayer de sauvegarder avec userId (utilisateur connecté)
+    const kyndexUser = localStorage.getItem('kyndex_currentUser');
+    if (kyndexUser) {
+      const user = JSON.parse(kyndexUser);
+      const userId = user.id?.toString() || user.email;
+      return setUserStorage(dataKey, data, userId);
+    }
+
+    // Fallback: utiliser sessionId pour utilisateurs non connectés
+    const sessionId = getSessionId();
+    const storageKey = `session_${sessionId}_${dataKey}`;
+    sessionStorage.setItem(storageKey, JSON.stringify(data));
+    console.log(`✓ Saved draft data with sessionId: ${sessionId}`);
+    return true;
+  } catch (e) {
+    console.error('Failed to save draft data', e);
+    return false;
+  }
+};
+
+/**
+ * Charge les données de demande
+ * Cherche d'abord avec userId, puis avec sessionId
+ */
+const loadDraftData = (dataKey: string): any => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    // Essayer de charger avec userId (utilisateur connecté)
+    const kyndexUser = localStorage.getItem('kyndex_currentUser');
+    if (kyndexUser) {
+      const user = JSON.parse(kyndexUser);
+      const userId = user.id?.toString() || user.email;
+      const data = getUserStorage(dataKey, userId);
+      if (data) {
+        console.log(`✓ Loaded draft data with userId: ${userId}`);
+        return data;
+      }
+    }
+
+    // Fallback: charger depuis sessionId
+    const sessionId = sessionStorage.getItem('kyndex_sessionId');
+    if (sessionId) {
+      const storageKey = `session_${sessionId}_${dataKey}`;
+      const data = sessionStorage.getItem(storageKey);
+      if (data) {
+        console.log(`✓ Loaded draft data with sessionId: ${sessionId}`);
+        return JSON.parse(data);
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.error('Failed to load draft data', e);
+    return null;
+  }
+};
+
+// ============================================================
+// ADVANCED AI ENGINE WITH SEMANTIC UNDERSTANDING
+// ============================================================
+
+interface ServiceDomain {
+  name: string;
+  keywords: string[];
+  services: string[];
+  description: string;
+}
+
+// Comprehensive Service Domains Database
+const SERVICE_DOMAINS: ServiceDomain[] = [
   {
-    id: 1,
-    name: 'Alexis Mercier',
-    role: 'Entrepreneur',
-    text: 'J\'ai trouvé 3 développeurs talentueux en moins de 24h. Le processus est ultra simple et les profils sont vérifiés.',
-    image: '👨‍💼',
-    skill: 'Développement'
+    name: 'Travaux & Rénovation',
+    keywords: [
+      'plombarie', 'plomb', 'électricité', 'électrique', 'peintur',
+      'renov', 'construir', 'carrel', 'parquet', 'toitur', 'fenêtr',
+      'menuiser', 'menuiserie', 'maçon', 'isolation', 'chauffag',
+      'climatisation', 'salle de bain', 'cuisine', 'sol', 'mur',
+      'portes', 'escalier', 'balcon', 'terrasse', 'façade',
+      'gouttière', 'charpente', 'serrurerie', 'vitrerie',
+      'joint', 'ciment', 'béton', 'pierre', 'brique', 'carrelage'
+    ],
+    services: [
+      'Plomberie',
+      'Électricité',
+      'Peinture & Décoration',
+      'Menuiserie',
+      'Carrelage',
+      'Chauffage & Climatisation',
+      'Isolation thermique',
+      'Rénovation générale',
+      'Maçonnerie',
+      'Serrurerie',
+      'Couverture & Toiture',
+      'Vitrerie'
+    ],
+    description: 'Services de construction, rénovation et travaux'
   },
   {
-    id: 2,
-    name: 'Valérie Fontaine',
-    role: 'Designer Freelance',
-    text: 'Kyndex m\'a permis de monétiser mes compétences facilement. Mes clients reviennent toujours!',
-    image: '👩‍🎨',
-    skill: 'Design'
+    name: 'Design & Créativité',
+    keywords: [
+      'design', 'branding', 'logo', 'creatif', 'créatif', 'mock',
+      'ui', 'ux', 'interface', 'visuel', 'identit', 'couleur',
+      'typograph', 'landing page', 'website', 'site web',
+      'graphique', 'illustration', 'motion', 'animation',
+      'bannière', 'flyer', 'affiche', 'packaging', 'lookbook',
+      'infographie', 'webdesign', 'appdesign', 'wireframe',
+      'prototype', 'photomontage', 'retouche', 'composition'
+    ],
+    services: [
+      'Design UI/UX',
+      'Branding & Identité visuelle',
+      'Création Logo',
+      'Design graphique',
+      'Web Design',
+      'Illustration',
+      'Motion Design',
+      'Design System',
+      'Packaging',
+      'Affiche & Flyer',
+      'Infographie'
+    ],
+    description: 'Design visuel et créatif'
   },
   {
-    id: 3,
-    name: 'Thomas Renard',
-    role: 'Startup Founder',
-    text: 'Le matching est impressionnant. Aucune plateforme n\'arrive à la cheville de Kyndex pour la qualité.',
-    image: '👨‍💻',
-    skill: 'Tech'
+    name: 'Développement Web & Mobile',
+    keywords: [
+      'développ', 'dev', 'code', 'coding', 'projet', 'app',
+      'application', 'site web', 'website', 'platform',
+      'backend', 'frontend', 'javascript', 'react', 'vue',
+      'node', 'database', 'sql', 'api', 'full stack',
+      'mobile', 'ios', 'android', 'web app', 'progressive',
+      'typescript', 'python', 'php', 'java', 'c#', '.net',
+      'django', 'flask', 'express', 'rails', 'laravel',
+      'docker', 'kubernetes', 'testing', 'qa', 'seo',
+      'performance', 'scalability', 'architecture',
+      'microservices', 'cloud', 'aws', 'firebase', 'heroku'
+    ],
+    services: [
+      'Développement Web',
+      'Développement Mobile',
+      'Frontend Developer',
+      'Backend Developer',
+      'Full Stack Developer',
+      'API Development',
+      'Database Design',
+      'DevOps',
+      'Testing & QA',
+      'Cloud Architecture',
+      'Performance Optimization',
+      'Web Scraping'
+    ],
+    description: 'Développement logiciel et applications'
+  },
+  {
+    name: 'Marketing & Acquisition',
+    keywords: [
+      'marketing', 'seo', 'sem', 'contenu', 'social',
+      'acquisition', 'stratégi', 'campagne', 'audience',
+      'growth', 'analytics', 'email', 'funnel', 'conversion',
+      'inbound', 'outbound', 'facebook', 'instagram',
+      'linkedin', 'twitter', 'tiktok', 'youtube',
+      'google ads', 'facebook ads', 'retargeting',
+      'affilitation', 'affiliate', 'partnership',
+      'branding', 'communication', 'pr', 'relations publiques',
+      'influenceur', 'ambassador', 'brand awareness',
+      'lead generation', 'lead nurturing', 'customer retention'
+    ],
+    services: [
+      'Marketing Digital',
+      'SEO/SEM',
+      'Content Marketing',
+      'Social Media Management',
+      'Growth Hacking',
+      'Analytics & Reporting',
+      'Email Marketing',
+      'Stratégie digitale',
+      'Publicité Digitale',
+      'Influencer Marketing',
+      'Relations Publiques'
+    ],
+    description: 'Marketing et acquisition client'
+  },
+  {
+    name: 'Coaching & Apprentissage',
+    keywords: [
+      'coaching', 'conseil', 'mentor', 'mentorat', 'formation',
+      'apprentissage', 'apprendre', 'compétence', 'skill',
+      'carrière', 'leadership', 'business', 'stratégi',
+      'améliorer', 'progress', 'développement', 'personnel',
+      'professionnel', 'cv', 'entretien', 'interview',
+      'réseau', 'networking', 'transition', 'reconversion',
+      'management', 'équipe', 'communication', 'négociation',
+      'cours', 'tutoring', 'leçon', 'master', 'certification',
+      'math', 'maths', 'français', 'anglais', 'langue',
+      'informatique', 'piano', 'guitare', 'fitness',
+      'yoga', 'natation', 'nager', 'sport', 'danse'
+    ],
+    services: [
+      'Coaching Carrière',
+      'Coaching Vie & Bien-être',
+      'Executive Coaching',
+      'Business Consulting',
+      'Formation & Certification',
+      'Mentoring',
+      'Leadership Development',
+      'Stratégie d\'entreprise',
+      'Tutoring Académique',
+      'Coaching Sportif',
+      'Cours particuliers',
+      'Préparation Concours'
+    ],
+    description: 'Coaching, formation et développement personnel'
+  },
+  {
+    name: 'Contenu & Copywriting',
+    keywords: [
+      'écri', 'content', 'contenu', 'article', 'blog',
+      'copy', 'copywriting', 'texte', 'description', 'rédact',
+      'storytelling', 'narrative', 'storia', 'script',
+      'newsletter', 'email', 'landing page copy',
+      'produit description', 'catalogue', 'brochure',
+      'texte marketing', 'persuasive', 'persuasion',
+      'journalisme', 'journaliste', 'rédacteur',
+      'traduction', 'transcription', 'proofreading',
+      'édition', 'correction', 'relecture'
+    ],
+    services: [
+      'Copywriting',
+      'Content Writing',
+      'Articles Blog',
+      'Rédaction SEO',
+      'Storytelling',
+      'Description produits',
+      'Newsletter',
+      'Scripts vidéo',
+      'Transcription',
+      'Traduction',
+      'Correction & Relecture'
+    ],
+    description: 'Création et rédaction de contenu'
+  },
+  {
+    name: 'Photographie & Vidéo',
+    keywords: [
+      'photo', 'photographie', 'vidéo', 'film', 'vidéographie',
+      'shooting', 'portrait', 'produit', 'événement',
+      'mariage', 'corporate', 'immobilier', 'food',
+      'montage', 'édition', 'editing', 'post-production',
+      'drone', 'cinématographie', 'color grading',
+      'animation', '3d', 'cgi', 'special effects',
+      'vfx', 'live streaming', 'streaming', 'webinaire'
+    ],
+    services: [
+      'Photographie',
+      'Photographie Produit',
+      'Photographie Portrait',
+      'Vidéographie',
+      'Montage Vidéo',
+      'Production Vidéo',
+      'Animation 3D',
+      'Motion Graphics',
+      'Color Grading',
+      'Post-Production'
+    ],
+    description: 'Photographie et vidéographie'
+  },
+  {
+    name: 'Consulting & Expertise',
+    keywords: [
+      'consulting', 'consultant', 'expert', 'expertise',
+      'audit', 'analyse', 'study', 'research',
+      'données', 'data analysis', 'analytics',
+      'bi', 'business intelligence', 'reporting',
+      'stratégie', 'planification', 'roadmap',
+      'financier', 'comptable', 'fiscal', 'impôt',
+      'legal', 'juridique', 'droit', 'contrat',
+      'hr', 'rhh', 'recrutement', 'ressources humaines',
+      'organisationnel', 'processus', 'optimisation'
+    ],
+    services: [
+      'Business Consulting',
+      'Data Analysis',
+      'Financial Consulting',
+      'Legal Consulting',
+      'HR Consulting',
+      'Process Optimization',
+      'Market Research',
+      'Strategic Planning',
+      'Audit & Compliance'
+    ],
+    description: 'Consulting et services professionnels spécialisés'
   }
 ];
 
-const STEPS = [
-  { 
-    number: '01', 
-    title: 'Créez votre profil', 
-    description: 'Décrivez vos talents, compétences et disponibilités en quelques minutes',
-    icon: '✨'
-  },
-  {
-    number: '02',
-    title: 'Parcourez les talents',
-    description: 'Découvrez une communauté de 10,000+ experts vérifiés et notés',
-    icon: '🔍'
-  },
-  {
-    number: '03',
-    title: 'Connectez-vous',
-    description: 'Messagerie instantanée, vérification de profils et paiements sécurisés',
-    icon: '🤝'
-  },
-  {
-    number: '04',
-    title: 'Échangez & Apprenez',
-    description: 'Collaborez, notez et construisez une relation durable',
-    icon: '🚀'
+// Calculate Levenshtein distance for string similarity
+const levenshteinDistance = (str1: string, str2: string): number => {
+  const track = Array(str2.length + 1)
+    .fill(null)
+    .map(() => Array(str1.length + 1).fill(0));
+
+  for (let i = 0; i <= str1.length; i += 1) {
+    track[0][i] = i;
   }
-];
+  for (let j = 0; j <= str2.length; j += 1) {
+    track[j][0] = j;
+  }
 
-const DEMO_SERVICES = [
-  {
-    id: 1,
-    name: 'Marie Dubois',
-    skill: 'Développeuse Web',
-    rate: '$45/h',
-    rating: 4.9,
-    reviews: 152,
-    image: '👩‍💻',
-    bio: 'React & Node.js'
-  },
-  {
-    id: 2,
-    name: 'Jean Martin',
-    skill: 'Designer UX/UI',
-    rate: '$50/h',
-    rating: 4.8,
-    reviews: 98,
-    image: '🎨',
-    bio: 'Design système'
-  },
-  {
-    id: 3,
-    name: 'Sophie Leclerc',
-    skill: 'Coach Business',
-    rate: '$60/h',
-    rating: 5.0,
-    reviews: 234,
-    image: '💼',
-    bio: 'Croissance startup'
-  },
-  {
-    id: 4,
-    name: 'Pierre Durand',
-    skill: 'Formateur Python',
-    rate: '$40/h',
-    rating: 4.7,
-    reviews: 89,
-    image: '🐍',
-    bio: 'Programmation'
-  },
-  {
-    id: 5,
-    name: 'Isabelle Moreau',
-    skill: 'Rédactrice SEO',
-    rate: '$35/h',
-    rating: 4.9,
-    reviews: 178,
-    image: '✍️',
-    bio: 'Content marketing'
-  },
-  {
-    id: 6,
-    name: 'Thomas Lefevre',
-    skill: 'Expert Marketing',
-    rate: '$55/h',
-    rating: 4.7,
-    reviews: 145,
-    image: '📊',
-    bio: 'Stratégie digitale'
-  },
-];
+  for (let j = 1; j <= str2.length; j += 1) {
+    for (let i = 1; i <= str1.length; i += 1) {
+      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      track[j][i] = Math.min(
+        track[j][i - 1] + 1,
+        track[j - 1][i] + 1,
+        track[j - 1][i - 1] + indicator
+      );
+    }
+  }
 
-export default function Home() {
-  const [hoveredSkill, setHoveredSkill] = useState<number | null>(null);
-  const [activeStep, setActiveStep] = useState(0);
+  return track[str2.length][str1.length];
+};
+
+// Calculate similarity score (0-1)
+const calculateSimilarity = (str1: string, str2: string): number => {
+  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+  const maxLen = Math.max(str1.length, str2.length);
+  return 1 - distance / maxLen;
+};
+
+// Find best matching keyword in a domain
+const findBestKeywordMatch = (text: string, keywords: string[]): number => {
+  let bestScore = 0;
+
+  // Split text into words
+  const words = text.toLowerCase().split(/\s+/);
+
+  for (const word of words) {
+    for (const keyword of keywords) {
+      const score = calculateSimilarity(word, keyword);
+      if (score > bestScore) {
+        bestScore = score;
+      }
+      // Also check if word contains keyword or keyword contains word
+      if (word.includes(keyword) || keyword.includes(word)) {
+        bestScore = Math.max(bestScore, 0.85);
+      }
+    }
+  }
+
+  return bestScore;
+};
+
+// Advanced AI Service Detection
+const intelligentServiceDetection = (
+  need: string
+): { category: string; services: string[]; brief: string; confidence: number } => {
+  let bestDomain: ServiceDomain | null = null;
+  let bestScore = 0;
+
+  // Calculate match score for each domain
+  for (const domain of SERVICE_DOMAINS) {
+    const score = findBestKeywordMatch(need, domain.keywords);
+    if (score > bestScore) {
+      bestScore = score;
+      bestDomain = domain;
+    }
+  }
+
+  // If no domain found with good confidence, use a generic one
+  if (!bestDomain || bestScore < 0.3) {
+    bestDomain = SERVICE_DOMAINS[SERVICE_DOMAINS.length - 1]; // Consulting
+    bestScore = 0.5;
+  }
+
+  // Generate contextual brief
+  const brief = `Brief: ${need.charAt(0).toUpperCase() + need.slice(1)}
+
+Objectif: Réaliser le projet décrit
+
+Contexte:
+• Besoin identifié: ${need}
+• Domaine: ${bestDomain.name}
+• Résultat attendu: À clarifier
+
+Spécifications:
+• Approche: À discuter avec le prestataire
+• Délai: À définir
+• Budget: À négocier
+• Livrables: À préciser
+
+Attentes:
+• Qualité: Premium
+• Communication: Transparente
+• Suivi: Régulier
+
+Délai: À convenir
+Budget: À définir`;
+
+  return {
+    category: bestDomain.name,
+    services: bestDomain.services,
+    brief,
+    confidence: Math.min(bestScore, 1)
+  };
+};
+
+// Rain Animation Component
+const RainBackground = () => {
+  useEffect(() => {
+    const canvas = document.getElementById('rainCanvas') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const raindrops: Array<{ x: number; y: number; speed: number; opacity: number }> = [];
+
+    // Create more raindrops for better effect
+    for (let i = 0; i < 150; i++) {
+      raindrops.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        speed: Math.random() * 3 + 2,
+        opacity: Math.random() * 0.4 + 0.15,
+      });
+    }
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+
+      raindrops.forEach((drop) => {
+        drop.y += drop.speed;
+        if (drop.y > canvas.height) {
+          drop.y = -5;
+          drop.x = Math.random() * canvas.width;
+        }
+
+        ctx.globalAlpha = drop.opacity;
+        ctx.beginPath();
+        ctx.moveTo(drop.x, drop.y);
+        ctx.lineTo(drop.x, drop.y + 20);
+        ctx.stroke();
+      });
+
+      requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return <canvas id="rainCanvas" className="fixed inset-0 pointer-events-none opacity-50" />;
+};
+
+// Freelancer Profile Card
+interface Provider {
+  id: number;
+  name: string;
+  role: string;
+  category: string;
+  image: string;
+  rating: number;
+  reviewCount: number;
+  description: string;
+  price: string;
+}
+
+const ProviderCard = ({ provider }: { provider: Provider }) => {
+  const categories = ['Design', 'Développement', 'Marketing', 'Coaching', 'Writing'];
+  const colors = [
+    'from-cyan-500/20 to-cyan-600/20 border-cyan-400/50',
+    'from-purple-500/20 to-purple-600/20 border-purple-400/50',
+    'from-pink-500/20 to-pink-600/20 border-pink-400/50',
+    'from-blue-500/20 to-blue-600/20 border-blue-400/50',
+  ];
+
+  const colorIndex = provider.id % colors.length;
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden">
-      {/* Navigation */}
-      <nav className="fixed top-0 z-50 w-full backdrop-blur-md bg-black/50 border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Kyndex
+    <div className={`backdrop-blur-md bg-gradient-to-br ${colors[colorIndex]} border rounded-2xl p-6 hover:scale-105 transition-transform duration-300 group cursor-pointer`}>
+      <div className="flex items-start justify-between mb-4">
+        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-cyan-400 to-purple-600 opacity-80 group-hover:opacity-100 transition" />
+        <div className="text-right">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-yellow-400">⭐ {provider.rating}</span>
+          </div>
+          <p className="text-gray-400 text-xs">({provider.reviewCount} avis)</p>
+        </div>
+      </div>
+
+      <h3 className="text-white font-bold text-lg mb-1">{provider.name}</h3>
+      <p className="text-cyan-300 text-sm font-medium mb-3">{provider.role}</p>
+
+      <p className="text-gray-300 text-sm mb-4 line-clamp-2">{provider.description}</p>
+
+      <div className="flex items-end justify-between">
+        <span className="px-3 py-1 rounded-lg bg-black/40 text-cyan-300 text-xs font-medium border border-cyan-400/30">
+          {provider.category}
+        </span>
+        <span className="text-white font-bold text-lg">{provider.price}</span>
+      </div>
+
+      <button className="w-full mt-4 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white font-bold py-2 px-4 rounded-lg transition flex items-center justify-center gap-2 text-sm">
+        Contacter <ArrowRight size={16} />
+      </button>
+    </div>
+  );
+};
+
+// Brief Generator Assistant
+const BriefGeneratorAssistant = ({ router }: { router: any }) => {
+  const [need, setNeed] = useState('');
+  const [generatedBrief, setGeneratedBrief] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showBrief, setShowBrief] = useState(false);
+  const [error, setError] = useState('');
+
+  const exampleNeed = "Je cherche un designer pour une landing page SaaS futuriste, avec copy orienté conversion, section pricing, FAQ, et intégration newsletter.";
+
+  const generateBrief = async () => {
+    if (!need.trim()) return;
+    setLoading(true);
+    setError('');
+
+    try {
+      const apiClient = createApiClient();
+      const response = await apiClient.post(
+        API_ENDPOINTS.GENERATE_HOMEPAGE_BRIEF,
+        { description: need }
+      );
+
+      if (response.data.success && response.data.brief) {
+        const brief = response.data.brief;
+        // Format the brief for display
+        const briefText = `Titre: ${brief.title}
+
+Description: ${brief.description}
+
+Compétences requises: ${brief.requiredSkills}
+
+Budget estimé: ${brief.estimatedBudget} EUR
+
+Durée: ${brief.estimatedDuration}
+
+Localisation: ${brief.location || 'À déterminer'}`;
+
+        setGeneratedBrief(briefText);
+        setShowBrief(true);
+      } else {
+        setError('Erreur lors de la génération du brief. Veuillez réessayer.');
+      }
+    } catch (err: any) {
+      console.error('Error generating brief:', err);
+      const message = err.response?.data?.message || err.message || 'Erreur lors de la génération du brief';
+      setError(`Erreur: ${message}. Veuillez réessayer.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadExample = () => {
+    setNeed(exampleNeed);
+  };
+
+  const copyBrief = () => {
+    navigator.clipboard.writeText(generatedBrief);
+    alert('Brief copié ! ✅');
+  };
+
+  const useBrief = () => {
+    const success1 = saveDraftData('draft_generatedBrief', generatedBrief);
+    const success2 = saveDraftData('draft_userNeed', need);
+    
+    if (success1 && success2) {
+      router.push('/results');
+    } else {
+      alert('Erreur lors de la sauvegarde. Veuillez réessayer.');
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Input & Brief */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Input Section */}
+          <div className="backdrop-blur-md bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border border-cyan-400/50 rounded-2xl p-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-2xl font-bold text-white">Assistant IA</h3>
+                <p className="text-cyan-300 text-sm font-medium">Rapide, structuré, orienté livrables</p>
+              </div>
+              <span className="text-cyan-300 text-sm px-3 py-1 rounded-full border border-cyan-400/50 bg-cyan-400/10">Prêt</span>
             </div>
-            <div className="text-xs px-2 py-1 rounded-full bg-white/10 border border-white/20">2026</div>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              href="/auth/login"
-              className="px-4 py-2 text-sm rounded-lg hover:bg-white/10 transition border border-white/20"
-            >
-              Connexion
-            </Link>
-            <Link
-              href="/auth/register"
-              className="px-4 py-2 text-sm bg-white text-black font-semibold rounded-lg hover:bg-gray-200 transition"
-            >
-              S'inscrire
-            </Link>
-          </div>
-        </div>
-      </nav>
 
-      {/* Hero Section Asymétrique */}
-      <section className="relative pt-32 pb-20 px-4 overflow-hidden">
-        {/* Background Effects */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" />
-          <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse animation-delay-2000" />
-          <div className="absolute -bottom-32 left-1/2 w-96 h-96 bg-pink-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse animation-delay-4000" />
-        </div>
+            <p className="text-white font-semibold mb-4">Décris ton besoin</p>
+            <textarea
+              value={need}
+              onChange={(e) => setNeed(e.target.value)}
+              placeholder="Ex: Je cherche un designer pour une landing page SaaS futuriste, avec copy orienté conversion, section pricing, FAQ, et intégration newsletter."
+              className="w-full h-40 bg-black/40 border border-cyan-400/30 rounded-xl p-4 text-white placeholder-gray-500 focus:border-cyan-300 focus:outline-none resize-none text-sm"
+            />
 
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Contenu */}
-            <div className="space-y-8 z-10">
-              <div className="space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm">
-                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-xs font-medium">Plateforme en temps réel</span>
-                </div>
-                <h1 className="text-6xl lg:text-7xl font-black leading-tight">
-                  Échangez vos <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">talents</span>
-                </h1>
-                <p className="text-xl text-gray-300 max-w-xl">
-                  Connectez-vous avec 10,000+ experts vérifiés. Trouvez, collaborez et apprenez de la meilleure communauté de talents.
-                </p>
-              </div>
-
-              {/* Search Premium */}
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-xl blur-xl opacity-25 group-hover:opacity-40 transition" />
-                <div className="relative bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl p-4 flex items-center gap-3 hover:border-white/40 transition">
-                  <span className="text-xl">🔍</span>
-                  <input 
-                    type="text"
-                    placeholder="Développeur, Designer, Coach..."
-                    className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none text-lg"
-                  />
-                  <button className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg hover:shadow-lg hover:shadow-purple-500/50 transition font-semibold text-sm">
-                    Chercher
-                  </button>
-                </div>
-              </div>
-
-              {/* Stats Elegantes */}
-              <div className="flex gap-8 pt-4">
-                <div>
-                  <p className="text-3xl font-bold text-transparent bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text">10K+</p>
-                  <p className="text-sm text-gray-400">Experts vérifiés</p>
-                </div>
-                <div className="w-px bg-white/10" />
-                <div>
-                  <p className="text-3xl font-bold text-transparent bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text">4.9★</p>
-                  <p className="text-sm text-gray-400">Évaluation moyenne</p>
-                </div>
-                <div className="w-px bg-white/10" />
-                <div>
-                  <p className="text-3xl font-bold text-transparent bg-gradient-to-r from-pink-400 to-red-400 bg-clip-text">50K+</p>
-                  <p className="text-sm text-gray-400">Collaborations</p>
-                </div>
-              </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={generateBrief}
+                disabled={loading || !need.trim()}
+                className="flex-1 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition"
+              >
+                {loading ? '⏳ Génération...' : 'Générer un brief'}
+              </button>
+              <button 
+                onClick={loadExample}
+                className="flex-1 border border-cyan-400/50 hover:border-cyan-400 text-cyan-300 font-bold py-3 px-6 rounded-xl transition"
+              >
+                Exemple
+              </button>
             </div>
 
-            {/* Visuel asymétrique */}
-            <div className="relative h-96 hidden lg:block">
-              <div className="absolute inset-0 rounded-2xl overflow-hidden">
-                {/* Floating Cards */}
-                <div className="absolute top-10 left-10 w-40 h-32 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 backdrop-blur-xl border border-white/20 rounded-xl p-4 space-y-2 animate-float">
-                  <p className="font-semibold text-sm">👩‍💻 Marie</p>
-                  <p className="text-xs text-gray-300">Dev React Senior</p>
-                  <div className="flex gap-1">⭐⭐⭐⭐⭐</div>
+            {error && (
+              <div className="mt-4 p-4 bg-red-500/20 border border-red-400/50 rounded-lg text-red-300 text-sm">
+                {error}
+              </div>
+            )}
+          </div>
+
+          {/* Brief Display Section */}
+          {showBrief && (
+            <div className="backdrop-blur-md bg-black/40 border border-cyan-400/30 rounded-2xl p-8">
+              <p className="text-white font-semibold mb-4">Brief généré</p>
+              <div className="bg-black/60 border border-cyan-400/20 rounded-xl p-6 whitespace-pre-wrap text-gray-300 text-sm font-mono max-h-64 overflow-y-auto mb-6">
+                {generatedBrief}
+              </div>
+
+              <div className="flex gap-3 justify-center">
+                <button 
+                  onClick={copyBrief}
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white font-bold py-3 px-6 rounded-lg transition"
+                >
+                  Copier
+                </button>
+                <button 
+                  onClick={useBrief}
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white font-bold py-3 px-6 rounded-lg transition"
+                >
+                  Utiliser pour la démo
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column - Why It Works */}
+        <div className="backdrop-blur-md bg-gradient-to-br from-purple-500/20 to-purple-600/20 border border-purple-400/50 rounded-2xl p-8 h-fit">
+          <h3 className="text-xl font-bold text-white mb-6">Pourquoi ça marche</h3>
+          <p className="text-gray-400 text-sm mb-6">Moins d'aller-retours, plus de qualité</p>
+
+          <div className="space-y-5">
+            {[
+              { num: 1, title: 'Scope clair', desc: "L'IA structure le besoin en objectifs, livrables, contraintes." },
+              { num: 2, title: 'Brief prêt à publier', desc: 'avec livrables' },
+              { num: 3, title: 'Tu choisis', desc: 'le meilleur match' },
+            ].map((item) => (
+              <div key={item.num} className="flex gap-4">
+                <div className="flex-shrink-0">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-gradient-to-r from-purple-400 to-purple-600 text-white font-bold text-sm">
+                    {item.num}
+                  </div>
                 </div>
-                <div className="absolute bottom-20 right-10 w-40 h-32 bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-xl border border-white/20 rounded-xl p-4 space-y-2 animate-float animation-delay-2000">
-                  <p className="font-semibold text-sm">🎨 Jean</p>
-                  <p className="text-xs text-gray-300">Designer UX/UI</p>
-                  <div className="flex gap-1">⭐⭐⭐⭐⭐</div>
-                </div>
-                <div className="absolute top-1/2 right-5 w-40 h-32 bg-gradient-to-br from-pink-500/20 to-orange-500/20 backdrop-blur-xl border border-white/20 rounded-xl p-4 space-y-2 animate-float animation-delay-4000">
-                  <p className="font-semibold text-sm">💼 Sophie</p>
-                  <p className="text-xs text-gray-300">Coach Business</p>
-                  <div className="flex gap-1">⭐⭐⭐⭐⭐</div>
+                <div>
+                  <p className="text-white font-bold text-sm">{item.title}</p>
+                  <p className="text-gray-400 text-xs mt-1">{item.desc}</p>
                 </div>
               </div>
+            ))}
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-purple-400/30">
+            <div className="space-y-3">
+              {[
+                { icon: '✓', text: 'Scope clair' },
+                { icon: '✓', text: 'Matching plus précis' },
+                { icon: '✓', text: 'Expérience premium' },
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-green-400 text-lg">{item.icon}</span>
+                  <span className="text-gray-300 text-sm">{item.text}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </section>
+      </div>
+    </div>
+  );
+};
 
-      {/* Skills Grid Section */}
-      <section className="relative py-24 px-4 border-t border-white/10">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold mb-4">Talents les plus demandés</h2>
-            <p className="text-gray-400 text-lg">Parcourez les domaines d'expertise les plus populaires</p>
+// Service Finder Assistant
+const ServiceFinderAssistant = ({ router }: { router: any }) => {
+  const [need, setNeed] = useState('');
+  const [services, setServices] = useState<string[]>([]);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showServices, setShowServices] = useState(false);
+  const [error, setError] = useState('');
+
+  const exampleNeed = "Je cherche un designer pour une landing page SaaS futuriste, avec copy orienté conversion, section pricing, FAQ, et intégration newsletter.";
+
+  const generateServices = async () => {
+    if (!need.trim()) return;
+    setLoading(true);
+    setError('');
+
+    try {
+      const apiClient = createApiClient();
+      const response = await apiClient.post(
+        API_ENDPOINTS.GENERATE_HOMEPAGE_SERVICES,
+        { description: need }
+      );
+
+      if (response.data.success && response.data.services) {
+        // Shuffle for variety
+        const shuffled = [...response.data.services].sort(() => Math.random() - 0.5);
+        setServices(shuffled);
+        setSelectedServices(shuffled);
+        setShowServices(true);
+      } else {
+        setError('Erreur lors de la génération des services. Veuillez réessayer.');
+      }
+    } catch (err: any) {
+      console.error('Error generating services:', err);
+      const message = err.response?.data?.message || err.message || 'Erreur lors de la génération des services';
+      setError(`Erreur: ${message}. Veuillez réessayer.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeService = (serviceToRemove: string) => {
+    setSelectedServices(selectedServices.filter(s => s !== serviceToRemove));
+  };
+
+  const loadExample = () => {
+    setNeed(exampleNeed);
+  };
+
+  const validateServices = () => {
+    if (selectedServices.length === 0) return;
+    
+    // Sauvegarder les données avec isolation utilisateur ou sessionId
+    const success1 = saveDraftData('draft_selectedServices', selectedServices);
+    const success2 = saveDraftData('draft_userNeed', need);
+    
+    if (success1 && success2) {
+      console.log('✓ Draft data saved successfully');
+      router.push('/results');
+    } else {
+      console.error('❌ Failed to save draft data');
+      alert('Erreur lors de la sauvegarde. Veuillez réessayer.');
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Input & Services */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Input Section */}
+          <div className="backdrop-blur-md bg-gradient-to-br from-purple-500/20 to-purple-600/20 border border-purple-400/50 rounded-2xl p-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-2xl font-bold text-white">Assistant IA</h3>
+                <p className="text-purple-300 text-sm font-medium">Rapide, structuré, orienté livrables</p>
+              </div>
+              <span className="text-purple-300 text-sm px-3 py-1 rounded-full border border-purple-400/50 bg-purple-400/10">Prêt</span>
+            </div>
+
+            <p className="text-white font-semibold mb-4">Décris ton besoin</p>
+            <textarea
+              value={need}
+              onChange={(e) => setNeed(e.target.value)}
+              placeholder="Ex: Je cherche un designer pour une landing page SaaS futuriste, avec copy orienté conversion, section pricing, FAQ, et intégration newsletter."
+              className="w-full h-40 bg-black/40 border border-purple-400/30 rounded-xl p-4 text-white placeholder-gray-500 focus:border-purple-300 focus:outline-none resize-none text-sm"
+            />
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={generateServices}
+                disabled={loading || !need.trim()}
+                className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition"
+              >
+                {loading ? '⏳ Recherche...' : 'Lancer la recherche'}
+              </button>
+              <button 
+                onClick={loadExample}
+                className="flex-1 border border-purple-400/50 hover:border-purple-400 text-purple-300 font-bold py-3 px-6 rounded-xl transition"
+              >
+                Exemple
+              </button>
+            </div>
+
+            {error && (
+              <div className="mt-4 p-4 bg-red-500/20 border border-red-400/50 rounded-lg text-red-300 text-sm">
+                {error}
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {FEATURED_SKILLS.map((skill, idx) => (
-              <div
-                key={skill.name}
-                onMouseEnter={() => setHoveredSkill(idx)}
-                onMouseLeave={() => setHoveredSkill(null)}
-                className="group relative cursor-pointer"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-white/0 to-white/0 group-hover:from-white/5 group-hover:to-white/5 rounded-xl blur transition" />
-                <div className={`relative bg-gradient-to-br ${skill.color} opacity-0 group-hover:opacity-10 transition rounded-xl absolute inset-0`} />
-                <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 group-hover:border-white/30 rounded-xl p-6 transition transform group-hover:scale-105 h-full flex flex-col items-center justify-center text-center space-y-3">
-                  <div className="text-3xl">{skill.icon}</div>
-                  <div>
-                    <p className="font-semibold text-sm">{skill.name}</p>
-                    <p className="text-xs text-gray-400 mt-1">{skill.count} experts</p>
+          {/* Services Display Section */}
+          {showServices && selectedServices.length > 0 && (
+            <div className="backdrop-blur-md bg-black/40 border border-purple-400/30 rounded-2xl p-8">
+              <p className="text-white font-semibold mb-4">Services générés</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                {selectedServices.map((service, i) => (
+                  <div key={i} className="group relative bg-gradient-to-r from-purple-500/20 to-purple-600/20 border border-purple-400/50 text-purple-300 px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2 transition-all hover:border-purple-300 hover:bg-gradient-to-r hover:from-purple-500/30 hover:to-purple-600/30 cursor-pointer">
+                    <Check size={16} className="text-green-400" /> {service}
+                    <button
+                      onClick={() => removeService(service)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Retirer ce service"
+                    >
+                      <X size={18} className="text-red-400 hover:text-red-300" />
+                    </button>
                   </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={validateServices}
+                  disabled={selectedServices.length === 0}
+                  className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition flex items-center justify-center gap-2"
+                >
+                  Voir les prestataires <ArrowRight size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column - Why It Works */}
+        <div className="backdrop-blur-md bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border border-cyan-400/50 rounded-2xl p-8 h-fit">
+          <h3 className="text-xl font-bold text-white mb-6">Pourquoi ça marche</h3>
+          <p className="text-gray-400 text-sm mb-6">Moins d'aller-retours, plus de qualité</p>
+
+          <div className="space-y-5">
+            {[
+              { num: 1, title: 'Scope clair', desc: "L'IA structure le besoin en objectifs, livrables, contraintes." },
+              { num: 2, title: 'Services générés', desc: 'par catégories pertinentes' },
+              { num: 3, title: 'Tu choisis', desc: 'le meilleur match' },
+            ].map((item) => (
+              <div key={item.num} className="flex gap-4">
+                <div className="flex-shrink-0">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-gradient-to-r from-cyan-400 to-cyan-600 text-white font-bold text-sm">
+                    {item.num}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-white font-bold text-sm">{item.title}</p>
+                  <p className="text-gray-400 text-xs mt-1">{item.desc}</p>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      </section>
 
-      {/* Comment ça marche - Timeline Interactive */}
-      <section className="relative py-24 px-4 border-t border-white/10">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold mb-4">Comment ça marche</h2>
-            <p className="text-gray-400 text-lg">Commencez en 4 étapes simples</p>
-          </div>
-
-          <div className="space-y-8">
-            {STEPS.map((step, idx) => (
-              <div 
-                key={step.number}
-                onClick={() => setActiveStep(idx)}
-                className="group cursor-pointer"
-              >
-                <div className="flex gap-6 items-start">
-                  {/* Ligne de connexion */}
-                  {idx < STEPS.length - 1 && (
-                    <div className="absolute left-[2.75rem] top-24 w-px h-20 bg-gradient-to-b from-white/30 to-transparent" />
-                  )}
-                  
-                  {/* Numéro */}
-                  <div className="relative z-10 flex-shrink-0">
-                    <div className={`w-20 h-20 rounded-full flex items-center justify-center font-bold text-lg transition-all transform group-hover:scale-110 ${
-                      activeStep === idx 
-                        ? 'bg-gradient-to-br from-blue-500 to-purple-500 shadow-lg shadow-purple-500/50' 
-                        : 'bg-white/10 border border-white/20'
-                    }`}>
-                      {activeStep === idx ? step.icon : step.number}
-                    </div>
-                  </div>
-
-                  {/* Contenu */}
-                  <div className={`flex-1 pt-2 transition-all ${
-                    activeStep === idx ? 'opacity-100' : 'opacity-70 group-hover:opacity-85'
-                  }`}>
-                    <h3 className="text-xl font-bold mb-2">{step.title}</h3>
-                    <p className="text-gray-400">{step.description}</p>
-                  </div>
+          <div className="mt-8 pt-6 border-t border-cyan-400/30">
+            <div className="space-y-3">
+              {[
+                { icon: '✓', text: 'Scope clair' },
+                { icon: '✓', text: 'Matching plus précis' },
+                { icon: '✓', text: 'Expérience premium' },
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-green-400 text-lg">{item.icon}</span>
+                  <span className="text-gray-300 text-sm">{item.text}</span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-      </section>
+      </div>
+    </div>
+  );
+};
 
-      {/* Featured Talents */}
-      <section className="relative py-24 px-4 border-t border-white/10">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold mb-4">Talents vedettes</h2>
-            <p className="text-gray-400 text-lg">Les meilleurs experts de notre communauté</p>
+// Auth Modal Component
+const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: { isOpen: boolean; onClose: () => void; initialMode?: 'login' | 'signup' }) => {
+  const router = useRouter();
+  const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
+  const [firstname, setFirstname] = useState('');
+  const [lastname, setLastname] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [location, setLocation] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    setError('');
+    if (!email || !password) {
+      setError('Email et mot de passe requis');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const users = JSON.parse(localStorage.getItem('kyndex_users') || '[]');
+      const user = users.find((u: any) => u.email === email);
+
+      if (!user) {
+        setError('Email ou mot de passe incorrect');
+        setLoading(false);
+        return;
+      }
+
+      if (user.password !== password) {
+        setError('Email ou mot de passe incorrect');
+        setLoading(false);
+        return;
+      }
+
+      // ✅ IMPORTANT: S'assurer que user.id = email (stable)
+      // Pour la migration des anciens comptes avec Date.now() comme ID
+      if (!user.id || typeof user.id === 'number') {
+        user.id = email;
+        const userIndex = users.findIndex((u: any) => u.email === email);
+        users[userIndex] = user;
+        localStorage.setItem('kyndex_users', JSON.stringify(users));
+      }
+
+      // Connexion réussie
+      localStorage.setItem('kyndex_currentUser', JSON.stringify(user));
+      setTimeout(() => {
+        router.push('/dashboard');
+        onClose();
+      }, 100);
+    } catch (err) {
+      setError('Erreur lors de la connexion');
+      setLoading(false);
+    }
+  };
+
+  const handleSignup = async () => {
+    setError('');
+    if (!firstname || !lastname || !email || !phone || !location || !password) {
+      setError('Tous les champs sont requis');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Le mot de passe doit avoir au moins 8 caractères');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const users = JSON.parse(localStorage.getItem('kyndex_users') || '[]');
+      
+      if (users.find((u: any) => u.email === email)) {
+        setError('Cet email est déjà utilisé');
+        setLoading(false);
+        return;
+      }
+
+      // ✅ IMPORTANT: Utiliser email comme ID (stable et unique)
+      // Jamais Date.now() car cela change à chaque création
+      const newUser = { id: email, firstname, lastname, email, phone, location, password };
+      users.push(newUser);
+      localStorage.setItem('kyndex_users', JSON.stringify(users));
+      localStorage.setItem('kyndex_currentUser', JSON.stringify(newUser));
+
+      setTimeout(() => {
+        router.push('/dashboard');
+        onClose();
+      }, 100);
+    } catch (err) {
+      setError('Erreur lors de la création du compte');
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-cyan-400/30 rounded-2xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Compte Kyndex</h2>
+            <p className="text-gray-400 text-sm mt-1">Connecte-toi ou crée ton compte.</p>
           </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition"
+          >
+            <X size={24} />
+          </button>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {DEMO_SERVICES.map((service) => (
-              <div
-                key={service.id}
-                className="group relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 hover:border-white/30 hover:bg-white/10 transition overflow-hidden"
+        <div className="flex gap-4 mb-8">
+          <button
+            onClick={() => { setMode('login'); setError(''); }}
+            className={`flex-1 font-bold py-2 px-4 rounded-xl transition ${
+              mode === 'login'
+                ? 'bg-gradient-to-r from-cyan-500 to-purple-600 text-white'
+                : 'border border-purple-400/50 text-purple-300 hover:text-purple-200'
+            }`}
+          >
+            Se connecter
+          </button>
+          <button
+            onClick={() => { setMode('signup'); setError(''); }}
+            className={`flex-1 font-bold py-2 px-4 rounded-xl transition ${
+              mode === 'signup'
+                ? 'bg-gradient-to-r from-cyan-500 to-purple-600 text-white'
+                : 'border border-purple-400/50 text-purple-300 hover:text-purple-200'
+            }`}
+          >
+            S'inscrire
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-2 rounded-lg mb-4 text-sm">
+            {error}
+          </div>
+        )}
+
+        {mode === 'login' ? (
+          <div className="space-y-4">
+            <div>
+              <label className="text-white text-sm font-semibold block mb-2">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="amel@entreprise.com"
+                className="w-full bg-gray-700/50 border border-cyan-400/30 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="text-white text-sm font-semibold block mb-2">Mot de passe</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-gray-700/50 border border-cyan-400/30 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none transition"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-white text-sm font-semibold block mb-2">Prénom</label>
+                <input
+                  type="text"
+                  value={firstname}
+                  onChange={(e) => setFirstname(e.target.value)}
+                  placeholder="Ex: Amel"
+                  className="w-full bg-gray-700/50 border border-cyan-400/30 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none transition"
+                />
+              </div>
+              <div>
+                <label className="text-white text-sm font-semibold block mb-2">Nom</label>
+                <input
+                  type="text"
+                  value={lastname}
+                  onChange={(e) => setLastname(e.target.value)}
+                  placeholder="Ex: Benali"
+                  className="w-full bg-gray-700/50 border border-cyan-400/30 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none transition"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-white text-sm font-semibold block mb-2">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="amel@entreprise.com"
+                className="w-full bg-gray-700/50 border border-cyan-400/30 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none transition"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-white text-sm font-semibold block mb-2">Téléphone</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Ex: +1 514 123 4567"
+                  className="w-full bg-gray-700/50 border border-cyan-400/30 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none transition"
+                />
+              </div>
+              <div>
+                <label className="text-white text-sm font-semibold block mb-2">Localisation</label>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="Montreal"
+                  className="w-full bg-gray-700/50 border border-cyan-400/30 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none transition"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-white text-sm font-semibold block mb-2">Mot de passe</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Au moins 8 caractères"
+                className="w-full bg-gray-700/50 border border-cyan-400/30 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:border-cyan-400 focus:outline-none transition"
+              />
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={mode === 'login' ? handleLogin : handleSignup}
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-xl transition mt-8"
+        >
+          {loading ? '⏳ Chargement...' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default function Home() {
+  const router = useRouter();
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    // Check if user is logged in
+    const currentUser = localStorage.getItem('kyndex_currentUser');
+    setIsLoggedIn(!!currentUser);
+
+    // Generate random provider data
+    const mockProviders: Provider[] = [
+      {
+        id: 1,
+        name: 'Sophie Martin',
+        role: 'Designer UI/UX',
+        category: 'Design',
+        image: '👩‍💼',
+        rating: 4.9,
+        reviewCount: 312,
+        description: 'Design + intégration responsive, optimisée conversion.',
+        price: '950 $ CAD',
+      },
+      {
+        id: 2,
+        name: 'Lucas Dubois',
+        role: 'Développeur Full Stack',
+        category: 'Développement',
+        image: '👨‍💻',
+        rating: 4.8,
+        reviewCount: 287,
+        description: 'Features front/back, intégrations, performances.',
+        price: '130 $ CAD/h',
+      },
+      {
+        id: 3,
+        name: 'Emma Chen',
+        role: 'Expert Marketing Digital',
+        category: 'Marketing',
+        image: '👱‍♀️',
+        rating: 4.9,
+        reviewCount: 198,
+        description: 'Positionnement, acquisition, funnel → plan 30 jours.',
+        price: '425 $ CAD',
+      },
+      {
+        id: 4,
+        name: 'Antoine Moreau',
+        role: 'Coach Carrière & Leadership',
+        category: 'Coaching',
+        image: '👨‍🏫',
+        rating: 4.8,
+        reviewCount: 156,
+        description: 'Pitch, portfolio, pricing, process client → 1:1.',
+        price: '175 $ CAD',
+      },
+      {
+        id: 5,
+        name: 'Chloé Laurent',
+        role: 'Copywriter & Brand',
+        category: 'Writing',
+        image: '✍️',
+        rating: 4.9,
+        reviewCount: 234,
+        description: 'Figma + HTML, SEO ready, Design System inclus.',
+        price: '800 $ CAD',
+      },
+      {
+        id: 6,
+        name: 'Marc Lefevre',
+        role: 'Architecte Solution',
+        category: 'Consultation',
+        image: '🏗️',
+        rating: 4.7,
+        reviewCount: 128,
+        description: 'Architecture scalable, tech stack, roadmap produit.',
+        price: '220 $ CAD/h',
+      },
+      {
+        id: 7,
+        name: 'Jade Wilson',
+        role: 'Video Producer',
+        category: 'Vidéo',
+        image: '🎬',
+        rating: 4.9,
+        reviewCount: 89,
+        description: 'Vidéos de présentation, motion, montage professionnel.',
+        price: '1165 $ CAD',
+      },
+      {
+        id: 8,
+        name: 'Thomas Dupont',
+        role: 'Data Analyst',
+        category: 'Data',
+        image: '📊',
+        rating: 4.8,
+        reviewCount: 95,
+        description: 'Analyse, dashboards, insights actionables, rapports.',
+        price: '160 $ CAD/h',
+      },
+    ];
+
+    setProviders(mockProviders);
+  }, []);
+
+  return (
+    <div className="relative min-h-screen bg-black overflow-hidden">
+      {/* Rain Animation */}
+      <RainBackground />
+
+      {/* Gradient Background */}
+      <div className="fixed inset-0 z-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-black via-blue-900/30 to-purple-900/50 opacity-70" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl opacity-20" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-600/20 rounded-full blur-3xl opacity-20" />
+      </div>
+
+      {/* Content */}
+      <div className="relative z-10">
+        {/* Navigation */}
+        <nav className="sticky top-0 z-20 backdrop-blur-md bg-black/50 border-b border-gray-800/50">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-r from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold">K</span>
+              </div>
+              <span className="text-white font-bold text-xl">Kyndex</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => router.push('/onboarding')}
+                className="text-cyan-300 hover:text-cyan-200 font-semibold transition text-sm"
               >
-                {/* Gradient Background au hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 via-purple-500/0 to-pink-500/0 group-hover:from-blue-500/10 group-hover:via-purple-500/10 group-hover:to-pink-500/10 transition" />
-                
-                <div className="relative">
-                  {/* Avatar */}
-                  <div className="text-6xl mb-4 text-center group-hover:scale-110 transition transform">
-                    {service.image}
-                  </div>
-
-                  {/* Info */}
-                  <h3 className="text-xl font-bold text-center mb-1">{service.name}</h3>
-                  <p className="text-sm text-transparent bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-center mb-2 font-semibold">
-                    {service.skill}
-                  </p>
-                  <p className="text-xs text-gray-400 text-center mb-4">{service.bio}</p>
-
-                  {/* Rating */}
-                  <div className="flex items-center justify-center gap-2 mb-4">
-                    <span className="text-sm font-bold">{service.rating}</span>
-                    <span className="text-yellow-400">⭐</span>
-                    <span className="text-xs text-gray-500">({service.reviews})</span>
-                  </div>
-
-                  {/* Price */}
-                  <p className="text-2xl font-bold text-center mb-4 text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text">
-                    {service.rate}
-                  </p>
-
-                  {/* Button */}
-                  <Link
-                    href="/auth/register"
-                    className="w-full py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg font-semibold text-center hover:shadow-lg hover:shadow-purple-500/50 transition block"
-                  >
-                    Voir le profil
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials Section */}
-      <section className="relative py-24 px-4 border-t border-white/10">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-4xl lg:text-5xl font-bold mb-16 text-center">Ce que disent nos utilisateurs</h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map((testimonial) => (
-              <div
-                key={testimonial.id}
-                className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 hover:border-white/30 hover:bg-white/10 transition"
+                Devenir prestataire
+              </button>
+              <button
+                onClick={() => {
+                  setAuthMode('login');
+                  setShowAuthModal(true);
+                }}
+                className="bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white px-6 py-2 rounded-lg font-bold transition text-sm"
               >
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="text-4xl">{testimonial.image}</div>
-                  <div>
-                    <p className="font-bold">{testimonial.name}</p>
-                    <p className="text-xs text-gray-400">{testimonial.role}</p>
-                  </div>
-                </div>
-                <p className="text-gray-300 italic">"{testimonial.text}"</p>
-              </div>
-            ))}
+                Se connecter ou s'inscrire
+              </button>
+            </div>
           </div>
-        </div>
-      </section>
+        </nav>
 
-      {/* Final CTA */}
-      <section className="relative py-24 px-4 border-t border-white/10">
-        <div className="max-w-4xl mx-auto text-center space-y-8">
-          <h2 className="text-5xl lg:text-6xl font-bold">Prêt à commencer?</h2>
-          <p className="text-xl text-gray-400">
-            Rejoignez la communauté Kyndex et trouvez les talents qu'il vous faut
+        {/* Hero Section */}
+        <section className="max-w-7xl mx-auto px-6 py-16 md:py-24">
+          <div className="mb-8 inline-block">
+            <span className="px-4 py-2 rounded-full border border-cyan-400/50 bg-cyan-400/10 text-cyan-300 text-sm font-medium">
+              🚀 Peer-to-peer • Community-first • Matching IA
+            </span>
+          </div>
+
+          <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+            Trouve les talents<br />
+            qu'il te faut.<br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600">
+              Offre tes compétences
+            </span>{' '}
+            au monde.
+          </h1>
+
+          <p className="text-gray-300 text-lg mb-8 max-w-2xl">
+            Kyndex connecte clients et freelancers via un matching moderne, des profils clairs, et un assistant IA qui transforme ton
+            besoin en brief prêt à publier.
           </p>
+        </section>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <Link
-              href="/auth/register"
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg font-bold hover:shadow-lg hover:shadow-purple-500/50 transition hover:scale-105 transform"
-            >
-              Créer un compte gratuitement
-            </Link>
-            <Link
-              href="/discover"
-              className="px-8 py-4 bg-white/10 border border-white/20 rounded-lg font-bold hover:bg-white/20 transition"
-            >
-              Parcourir les talents
-            </Link>
+        {/* Featured Providers Section */}
+        <section className="max-w-7xl mx-auto px-6 py-16">
+          <div className="mb-12">
+            <span className="inline-block px-4 py-2 rounded-full bg-cyan-400/10 border border-cyan-400/50 text-cyan-300 text-sm font-medium mb-6">
+              ⭐ Profils populaires
+            </span>
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Découvre les meilleurs talents</h2>
+            <p className="text-gray-400">Une sélection de prestataires vérifiés, notés et prêts à collaborer</p>
           </div>
-        </div>
-      </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/10 py-12 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <p className="font-bold mb-4">Découvrir</p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li><a href="#" className="hover:text-white transition">Services</a></li>
-                <li><a href="#" className="hover:text-white transition">Talents</a></li>
-                <li><a href="#" className="hover:text-white transition">Parcourir</a></li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-bold mb-4">Entreprise</p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li><a href="#" className="hover:text-white transition">À propos</a></li>
-                <li><a href="#" className="hover:text-white transition">Blog</a></li>
-                <li><a href="#" className="hover:text-white transition">Carrières</a></li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-bold mb-4">Légal</p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li><a href="#" className="hover:text-white transition">Conditions</a></li>
-                <li><a href="#" className="hover:text-white transition">Confidentialité</a></li>
-                <li><a href="#" className="hover:text-white transition">Cookies</a></li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-bold mb-4">Réseaux</p>
-              <div className="space-y-2 text-sm text-gray-400">
-                <p><a href="#" className="hover:text-white transition">Twitter/X</a></p>
-                <p><a href="#" className="hover:text-white transition">LinkedIn</a></p>
-                <p><a href="#" className="hover:text-white transition">Instagram</a></p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {providers.slice(0, 8).map((provider) => (
+              <ProviderCard key={provider.id} provider={provider} />
+            ))}
+          </div>
+
+          <div className="text-center mt-12">
+            <button 
+              onClick={() => router.push('/discover')}
+              className="border border-cyan-400/50 hover:border-cyan-300 text-cyan-300 font-bold py-3 px-8 rounded-xl transition"
+            >
+              Voir tous les prestataires
+            </button>
+          </div>
+        </section>
+
+        {/* Brief Generator Section */}
+        <section className="max-w-7xl mx-auto px-6 py-16">
+          <div className="mb-12">
+            <span className="inline-block px-4 py-2 rounded-full bg-cyan-400/10 border border-cyan-400/50 text-cyan-300 text-sm font-medium mb-6">
+              📝 Créer une demande
+            </span>
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Décris ton besoin. L'IA génère un brief.</h2>
+            <p className="text-gray-400">En quelques secondes, transforme ton idée en brief ultra clair, prêt à publier pour attirer les meilleurs talents</p>
+          </div>
+
+          <div className="flex justify-center">
+            <BriefGeneratorAssistant router={router} />
+          </div>
+        </section>
+
+        {/* Service Finder Section */}
+        <section className="max-w-7xl mx-auto px-6 py-16">
+          <div className="mb-12">
+            <span className="inline-block px-4 py-2 rounded-full bg-purple-400/10 border border-purple-400/50 text-purple-300 text-sm font-medium mb-6">
+              🔍 Trouver des prestataires
+            </span>
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Recherche intelligente par services</h2>
+            <p className="text-gray-400">Décris ce que tu cherches, l'IA classe les prestataires par catégories pertinentes</p>
+          </div>
+
+          <div className="flex justify-center">
+            <ServiceFinderAssistant router={router} />
+          </div>
+        </section>
+
+        {/* Why Kyndex Section */}
+        <section className="max-w-7xl mx-auto px-6 py-16">
+          <h2 className="text-4xl font-bold text-white mb-12 text-center">Pourquoi Kyndex</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { title: 'Matching+', desc: 'Catégories + compétences + critères d\'acceptation', icon: '🎯' },
+              { title: 'Scope clair', desc: 'L\'IA structure le besoin en objectifs, livrables, contraintes', icon: '📋' },
+              { title: 'Expérience premium', desc: 'Moins de friction pour les clients, plus de signal pour les talents', icon: '✨' },
+              { title: 'Communauté vérifiée', desc: 'Signal, réputation, transparence, support direct', icon: '🤝' },
+            ].map((item, i) => (
+              <div key={i} className="backdrop-blur-md bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-cyan-400/50 transition group">
+                <div className="text-3xl mb-3 group-hover:scale-110 transition">{item.icon}</div>
+                <h3 className="text-white font-bold mb-2">{item.title}</h3>
+                <p className="text-gray-400 text-sm">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Stats Section */}
+        <section className="max-w-7xl mx-auto px-6 py-16">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            {[
+              { num: '24', label: 'Catégories actives' },
+              { num: '180+', label: 'Talents en vitrine' },
+              { num: '4.9', label: 'Satisfaction moyenne' },
+              { num: '100%', label: 'Paiements sécurisés' },
+            ].map((stat, i) => (
+              <div key={i}>
+                <p className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-600 mb-2">
+                  {stat.num}
+                </p>
+                <p className="text-gray-400 text-sm">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="max-w-4xl mx-auto px-6 py-16 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">Rejoins notre communauté</h2>
+          <p className="text-gray-400 mb-8 text-lg">Que tu sois talent ou client, commence dès maintenant</p>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button 
+              onClick={() => {
+                setAuthMode('signup');
+                setShowAuthModal(true);
+              }}
+              className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white font-bold py-4 px-8 rounded-xl transition flex-1"
+            >
+              Je suis un prestataire
+            </button>
+            <button 
+              onClick={() => router.push('/discover')}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-bold py-4 px-8 rounded-xl transition flex-1"
+            >
+              Je cherche des talents
+            </button>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="border-t border-gray-800/50 mt-20">
+          <div className="max-w-7xl mx-auto px-6 py-12">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
+              <div>
+                <p className="text-gray-400 text-sm font-bold mb-4">Produit</p>
+                <ul className="space-y-2">
+                  <li>
+                    <Link href="#" className="text-gray-500 hover:text-white text-sm transition">
+                      Propositions
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="#" className="text-gray-500 hover:text-white text-sm transition">
+                      Assistant IA
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm font-bold mb-4">Pour qui</p>
+                <ul className="space-y-2">
+                  <li>
+                    <Link href="#" className="text-gray-500 hover:text-white text-sm transition">
+                      Freelancers
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="#" className="text-gray-500 hover:text-white text-sm transition">
+                      Clients
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm font-bold mb-4">Contact</p>
+                <Link href="mailto:hello@kyndex.app" className="text-gray-500 hover:text-white text-sm transition">
+                  hello@kyndex.app
+                </Link>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm font-bold mb-4">Légal</p>
+                <ul className="space-y-2">
+                  <li>
+                    <Link href="#" className="text-gray-500 hover:text-white text-sm transition">
+                      Conditions
+                    </Link>
+                  </li>
+                </ul>
               </div>
             </div>
+            <div className="border-t border-gray-800/50 pt-8">
+              <p className="text-gray-500 text-sm">© 2026 Kyndex. Tous droits réservés.</p>
+            </div>
           </div>
-          <div className="border-t border-white/10 pt-8 text-center text-sm text-gray-500">
-            <p>&copy; 2026 Kyndex. Tous droits réservés.</p>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
+
+      {/* Modals */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
     </div>
   );
 }

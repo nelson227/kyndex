@@ -1,15 +1,16 @@
-# Kyndex - Plateforme d'Échange de Compétences
+# Kyndex - Plateforme de Marché de Services par Compétences
 
 ## 🎯 Vue d'Ensemble
 
-Kyndex est une **plateforme marketplace peer-to-peer décentralisée** permettant aux utilisateurs d'échanger des compétences, des services et des connaissances.
+Kyndex est une **plateforme marketplace peer-to-peer** permettant aux utilisateurs d'**offrir et demander des services** basés sur leurs compétences.
 
-### Concept Principal
-- **Skill Matching** : Connexion automatique entre utilisateurs offrant et cherchant des compétences similaires
-- **Réputation** : Système de notation et badges
-- **Transactions** : Paiements et crédits internes
-- **Conversations** : Messaging temps réel
-- **IA** : Profiling, matching, modération automatiques
+### Modèle d'Affaires
+- **Service Listings** : Les prestataires postent leurs services avec tarifs et détails
+- **Service Requests** : Les clients postent des demandes de services (besoins)
+- **Matching Direct** : Les prestataires découvrent et répondent aux demandes
+- **Conversations** : Communication directe entre client et prestataire
+- **Transactions & Système de Crédits** : Paiements internes sécurisés
+- **Réputation** : Avis et ratings basés sur les interactions
 
 ---
 
@@ -18,54 +19,47 @@ Kyndex est une **plateforme marketplace peer-to-peer décentralisée** permettan
 ```
 kyndex/
 ├── backend/
-│   ├── services/
-│   │   ├── auth-service/
-│   │   ├── user-service/
-│   │   ├── skills-service/
-│   │   ├── matching-service/
-│   │   ├── messaging-service/
-│   │   ├── transaction-service/
-│   │   ├── reputation-service/
-│   │   ├── ai-service/
-│   │   ├── notification-service/
-│   │   └── admin-service/
-│   ├── shared/
-│   │   ├── models/
-│   │   ├── utils/
-│   │   ├── decorators/
-│   │   └── middleware/
-│   ├── infra/
-│   │   ├── docker/
-│   │   ├── terraform/
-│   │   └── k8s/
-│   └── tests/
+│   ├── src/
+│   │   ├── modules/
+│   │   │   ├── auth/           # Authentification JWT
+│   │   │   ├── profile/        # Gestion des profils
+│   │   │   ├── services/       # Offres de services
+│   │   │   ├── bookings/       # Réservations/Contrats
+│   │   │   ├── messages/       # Messaging
+│   │   │   ├── categories/     # Catégories de services
+│   │   │   └── match/          # Matching (legacy)
+│   │   ├── common/             # Decorators, Guards, Filters
+│   │   ├── config/             # Configuration
+│   │   └── main.ts
+│   ├── prisma/
+│   │   ├── schema.prisma       # Schéma DB
+│   │   └── migrations/
+│   └── package.json
+│
 ├── frontend/
-│   ├── app/
-│   │   ├── auth/
-│   │   ├── dashboard/
-│   │   ├── profile/
-│   │   ├── matching/
-│   │   ├── messaging/
-│   │   └── transactions/
-│   ├── components/
-│   │   ├── common/
-│   │   ├── forms/
-│   │   └── layouts/
-│   ├── lib/
-│   │   ├── api/
-│   │   ├── hooks/
-│   │   └── utils/
-│   ├── public/
-│   └── styles/
-├── mobile/
-│   ├── android/
-│   └── ios/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── auth/           # Login/Register
+│   │   │   ├── onboarding/     # Setup du profil
+│   │   │   ├── discover/       # Découvrir les services
+│   │   │   ├── dashboard/      # Accueil (demandes de services)
+│   │   │   ├── profile/        # Mon profil & mes services
+│   │   │   ├── messages/       # Conversations
+│   │   │   ├── matches/        # Legacy matching
+│   │   │   └── services/       # Gestion des services
+│   │   ├── components/         # Composants réutilisables
+│   │   ├── lib/                # Utilities (API client, etc.)
+│   │   └── hooks/              # Custom React hooks
+│   └── package.json
+│
 ├── docs/
-│   ├── api/
-│   ├── architecture/
-│   └── guides/
-└── .github/
-    └── workflows/
+│   ├── ARCHITECTURE.md         # Architecture et flux
+│   ├── FEATURES.md             # Features actuelles
+│   ├── API.md                  # Routes API
+│   ├── DATABASE.md             # Schéma Prisma
+│   └── DEVELOPMENT.md          # Guide de développement
+│
+└── docker-compose.yml          # Dev environment
 ```
 
 ---
@@ -73,140 +67,205 @@ kyndex/
 ## 🚀 Démarrage Rapide
 
 ### Prérequis
-- Node.js >= 18
+- Node.js >= 20
 - Docker & Docker Compose
-- PostgreSQL 14+
-- Redis 7+
 - Git
 
-### Installation Backend
+### Installation
+
 ```bash
+# Clone le repo
+git clone https://github.com/utilisateur/kyndex.git
+cd kyndex
+
+# Backend
 cd backend
 npm install
-# Configuration .env
 npm run dev
-```
+# Serveur sur http://localhost:3001
 
-### Installation Frontend
-```bash
+# Frontend (dans un autre terminal)
 cd frontend
 npm install
 npm run dev
+# Serveur sur http://localhost:3000
 ```
 
 ### Avec Docker
 ```bash
-docker-compose up -d
+docker-compose up
 ```
 
 ---
 
-## 📋 Phases de Développement
+## 🎨 Fonctionnalités Principales
 
-### Phase 1 : MVP (3-4 mois)
-✅ Authentification + Profiles
-✅ Skills & Matching basique
-✅ Messaging temps réel
-✅ Transactions simples
-✅ Système réputation
+### ✅ Actuelles (MVP)
 
-### Phase 2 : Microservices (2 mois)
-- Découpage services
-- Event streaming
-- AI advanced features
+#### Authentification & Profils
+- Registration/Login par email
+- JWT avec refresh tokens
+- Onboarding pour completer le profil
+- Profil utilisateur avec avatar et bio
 
-### Phase 3 : Global Scale (3 mois)
-- Multi-région
-- CDN global
-- Performance optimization
+#### Services & Demandes
+- **Services**: Prestataires postent leurs services (tarif, description, localisation)
+- **Service Requests**: Clients postent des demandes (besoins, budget, deadline)
+- **Réponses**: Prestataires découvrent et répondent aux demandes
+- **Dashboard**: Voir les demandes en cours avec statuts (NOUVEAU / À_VALIDER / EN_ATTENTE)
 
-### Phase 4 : Public API (2 mois)
-- API marketplace publique
-- Partner integrations
+#### Messaging
+- Conversations en temps réel
+- Création auto de conversation lors d'une réponse
+- Messages avec timestamps
+
+#### Système de Réputation
+- Avis et ratings
+- Compteurs de services complétés
+
+### 🔄 En Développement
+
+- Système de paiements complet
+- Notifications temps réel
+- Matchmaking avancé basé sur compétences
+
+### 📋 Plannifiées (Futures)
+
+- Système de badges
+- Portefeuille/Portfolio avec images
+- Matching basé sur l'IA
+- Intégrations externes (Stripe, etc.)
 
 ---
 
-## 🔐 Sécurité
+## 🔒 Architecture de Sécurité
 
-- JWT + OAuth2
-- 2FA TOTP
-- Rate limiting
-- RBAC
-- Audit logs
-- RGPD compliant
-
----
-
-## 📊 Métriques & Monitoring
-
-- **Uptime Target** : 99.99%
-- **API Latency** : < 200ms (p95)
-- **Logging** : Structured logs (Pino)
-- **Monitoring** : Prometheus + Grafana
-- **Tracing** : OpenTelemetry
+- **Auth** : JWT tokens (15min) + Refresh tokens (7 jours)
+- **Code** : Strongly typed avec TypeScript
+- **DB** : ORM via Prisma avec validations
+- **CORS** : Configuré pour développement
+- **Logs** : Console logs pour debugging
 
 ---
 
 ## 🛠️ Stack Technique
 
 ### Backend
-- **Runtime** : Node.js
-- **Framework** : NestJS
-- **ORM** : Prisma
-- **Real-time** : Socket.io
-- **Queue** : BullMQ
-- **Search** : Elasticsearch
+- **Runtime** : Node.js 20.19.5
+- **Framework** : NestJS 10.2.8
+- **ORM** : Prisma 5.5.2
+- **Real-time** : Socket.io 4.7.2
+- **Language** : TypeScript
+- **Formatting** : Prettier
 
 ### Frontend
-- **Framework** : Next.js 14+
-- **Style** : Tailwind CSS + shadcn/ui
-- **State** : Zustand
+- **Framework** : Next.js 14.0.3 (App Router)
+- **React** : 18
+- **Styling** : Tailwind CSS
+- **State** : Zustand 4.4.3
+- **HTTP Client** : Axios
 - **Forms** : React Hook Form
-- **i18n** : next-i18n-router
+- **Icons** : Lucide React
+- **Language** : TypeScript
 
-### Data
-- **Database** : PostgreSQL
-- **Cache** : Redis
-- **Search** : Elasticsearch/PostgreSQL FTS
-
-### Infrastructure
-- **Container** : Docker
-- **Orchestration** : Kubernetes (future)
-- **IaC** : Terraform
-- **CI/CD** : GitHub Actions
-- **Deployment** : Vercel (frontend) + AWS/GCP (backend)
+### Database
+- **Dev** : SQLite (local)
+- **Prod** : PostgreSQL (plannifié)
+- **Schema Management** : Prisma migrations
 
 ---
 
-## 📚 Documentation
+## 📊 Modèle de Données Simplifié
 
-- [Technical Specification](TECHNICAL_SPEC.md)
-- [Architecture Details](./docs/ARCHITECTURE.md)
-- [API Documentation](./docs/API.md)
-- [Database Schema](./docs/DATABASE.md)
-- [Development Guide](./docs/DEVELOPMENT.md)
+```
+User (Profil)
+  ├── Profile (Bio, Avatar, Localisation)
+  ├── Services[] (Offres de services)
+  ├── ServiceRequests[] (Demandes postées)
+  ├── Bookings[] (Réservations comme customer ou provider)
+  └── Conversations[] (Messages)
+
+Service
+  ├── Skill (Compétence)
+  ├── Category (Catégorie)
+  └── Bookings[] (Réservations)
+
+ServiceRequest
+  ├── Customer (Qui demande)
+  └── Bookings[] (Réponses des prestataires)
+
+Booking
+  ├── Customer (Client)
+  ├── Provider (Prestataire)
+  ├── Service (Service concerné)
+  ├── ServiceRequest (Demande concernée)
+  └── Messages[] (Communications)
+```
 
 ---
 
-## 👥 Contribution
+## 📚 Documentation Complète
 
-Voir [CONTRIBUTING.md](./CONTRIBUTING.md)
+- **[Architecture Détaillée](./docs/ARCHITECTURE.md)** - Flux de l'application et architecture
+- **[Fonctionnalités](./docs/FEATURES.md)** - Liste complète des features
+- **[Routes API](./docs/API.md)** - Endpoints et documentation
+- **[Schéma Database](./docs/DATABASE.md)** - Modèles Prisma
+- **[Guide Développement](./docs/DEVELOPMENT.md)** - Comment développer
+
+---
+
+## 🔧 Développement
+
+### Commandes Utiles
+
+```bash
+# Backend
+cd backend
+
+npm run dev          # Mode développement avec watch
+npm run build        # Build production
+npm run typecheck    # Vérifier les types TS
+npm run test         # Lancer les tests
+
+# Prisma
+npx prisma migrate dev    # Créer une migration
+npx prisma studio        # Visual database editor
+npx prisma generate       # Régénérer le client
+npx prisma seed           # Poppler la DB avec seed.ts
+
+# Frontend
+cd frontend
+
+npm run dev          # Mode développement
+npm run build        # Build production
+npm run lint         # Linter le code
+npm run type-check   # Vérifier les types
+```
+
+### Flux de Développement
+
+1. **Créer une branche** : `git checkout -b feature/nom-feature`
+2. **Développer** : Faire les changements
+3. **Tester localement** : Vérifier dans le navigateur
+4. **Commit** : `git commit -m "feat: description"`
+5. **Push & PR** : Créer une pull request
+
+---
+
+## 📞 Support & Contact
+
+- **Issues** : Créer un issue GitHub
+- **Discussions** : Utiliser GitHub Discussions
+- **Email** : [support@kyndex.fr](mailto:support@kyndex.fr)
 
 ---
 
 ## 📄 Licence
 
-MIT License - Voir [LICENSE](./LICENSE)
+MIT License
 
 ---
 
-## 📞 Contact
-
-- **Team Lead** : [contact@kyndex.com](mailto:contact@kyndex.com)
-- **Issues** : GitHub Issues
-- **Discussions** : GitHub Discussions
-
----
-
-**Version** : 1.0.0  
-**Mise à jour** : 27 février 2026
+**Version** : 1.0.0 MVP  
+**Statut** : En développement actif  
+**Dernière mise à jour** : 3 mars 2026

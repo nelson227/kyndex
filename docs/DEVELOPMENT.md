@@ -1,646 +1,217 @@
-# Development Guide - Kyndex
+# Guide de Développement Kyndex
 
-## 🚀 Quick Start
+## 🚀 Mise en Place de l'Environnement
 
-### Prerequisites
-- Node.js 18+ (LTS recommended)
-- Docker & Docker Compose
-- PostgreSQL 14+
-- Redis 7+
+### Prérequis
+- Node.js >= 20.19.5
 - Git
+- VS Code (optionnel mais recommandé)
+- Docker (optionnel, pour la DB local)
 
-### Local Setup
+### Installation du Backend
 
 ```bash
-# Clone repository
-git clone https://github.com/kyndex/kyndex.git
-cd kyndex
+cd backend
 
-# Install dependencies
+# Installer les dépendances
 npm install
 
-# Setup environment
-cp .env.example .env.local
+# Configuration .env (copier .env.example et ajuster)
+cp .env.example .env
+# Éditer .env avec vos valeurs
 
-# Start services with Docker
-docker-compose up -d
+# Initialiser la base de données
+npx prisma generate       # Générer le client Prisma
+npx prisma migrate dev    # Créer la DB et appliquer les migrations
+npx prisma seed           # Remplir avec des données de test
 
-# Run database migrations
-npm run db:migrate:dev
-
-# Start development servers
+# Lancer le serveur
 npm run dev
+# Serveur disponible sur http://localhost:3001
+# Swagger docs sur http://localhost:3001/api-docs
+```
+
+### Installation du Frontend
+
+```bash
+cd frontend
+
+# Installer les dépendances
+npm install
+
+# Configuration .env.local (copier .env.example et ajuster)
+cp .env.example .env.local
+# NEXT_PUBLIC_API_URL=http://localhost:3001
+
+# Lancer le serveur
+npm run dev
+# App disponible sur http://localhost:3000
 ```
 
 ---
 
-## 📚 Project Structure
+## 📂 Structure des Fichiers
 
-### Backend (`/backend`)
+### Backend Structure
 
 ```
 backend/
 ├── src/
-│   ├── main.ts              # Application entry point
-│   ├── app.module.ts        # Root NestJS module
-│   ├── modules/
-│   │   ├── auth/
-│   │   │   ├── auth.controller.ts
-│   │   │   ├── auth.service.ts
-│   │   │   ├── auth.module.ts
-│   │   │   ├── strategies/
-│   │   │   │   ├── jwt.strategy.ts
-│   │   │   │   ├── google.strategy.ts
-│   │   │   │   └── github.strategy.ts
-│   │   │   └── guards/
-│   │   │       ├── jwt.guard.ts
-│   │   │       └── roles.guard.ts
-│   │   └── [other modules...]
-│   ├── common/
-│   │   ├── database/
-│   │   │   ├── database.module.ts
-│   │   │   └── prisma.service.ts
-│   │   ├── decorators/
-│   │   ├── filters/
-│   │   ├── guards/
-│   │   ├── interceptors/
-│   │   ├── middleware/
-│   │   ├── pipes/
-│   │   └── types/
-│   ├── config/
-│   │   ├── database.config.ts
-│   │   └── app.config.ts
-│   └── utils/
-├── test/
+│   ├── main.ts                 # Point d'entrée
+│   ├── app.module.ts           # Module principal
+│   ├── common/                 # Utilitaires partagés
+│   │   ├── decorators/        # Décorateurs (@CurrentUser, etc.)
+│   │   ├── filters/           # Filtres exception globaux
+│   │   ├── guards/            # Guards (JWT, etc.)
+│   │   └── pipes/             # Pipes de validation
+│   ├── config/                 # Configuration app
+│   └── modules/                # Modules métier
+│       ├── auth/              # Authentification
+│       ├── profile/           # Profils utilisateurs
+│       ├── services/          # Services & Demandes
+│       ├── bookings/          # Réservations
+│       ├── messages/          # Messaging
+│       ├── categories/        # Catégories
+│       └── match/             # Matching (legacy)
 ├── prisma/
-│   ├── schema.prisma
-│   └── migrations/
-├── docker/
-├── .env.example
-├── .eslintrc.json
-├── tsconfig.json
-├── jest.config.js
+│   ├── schema.prisma           # Schéma DB
+│   ├── seed.ts                 # Données de seed
+│   └── migrations/             # Migrations DB
+├── test/                       # Tests
+├── .env.example                # Template .env
 └── package.json
 ```
 
-### Frontend (`/frontend`)
+### Frontend Structure
 
 ```
 frontend/
-├── app/
-│   ├── (auth)/
-│   │   ├── login/
-│   │   ├── register/
-│   │   └── forgot-password/
-│   ├── (main)/
-│   │   ├── dashboard/
-│   │   ├── profile/
-│   │   │   ├── [id]/
-│   │   │   └── edit/
-│   │   ├── matching/
-│   │   ├── messaging/
-│   │   └── transactions/
-│   ├── layout.tsx
-│   └── page.tsx
-├── components/
-│   ├── common/
-│   │   ├── Header.tsx
-│   │   ├── Sidebar.tsx
-│   │   └── Footer.tsx
-│   ├── forms/
-│   ├── layouts/
-│   └── ui/
-├── lib/
-│   ├── api/
-│   │   ├── client.ts
-│   │   ├── endpoints.ts
-│   │   └── hooks/
-│   │       ├── useAuth.ts
-│   │       ├── useSkills.ts
-│   │       ├── useMatching.ts
-│   │       └── ...
-│   ├── utils/
-│   └── constants/
-├── styles/
-├── public/
-├── .env.example
-├── tailwind.config.ts
-├── tsconfig.json
+├── src/
+│   ├── app/                    # Pages & layouts (App Router)
+│   │   ├── page.tsx           # Home
+│   │   ├── layout.tsx         # Root layout
+│   │   ├── auth/              # Auth pages
+│   │   ├── onboarding/        # Setup du profil
+│   │   ├── dashboard/         # Accueil principal
+│   │   ├── discover/          # Découvrir services
+│   │   ├── profile/           # Mon profil
+│   │   ├── messages/          # Messaging
+│   │   ├── matches/           # Matching (legacy)
+│   │   └── services/          # Gérer mes services
+│   ├── components/             # Composants réutilisables
+│   ├── hooks/                  # Custom React hooks
+│   ├── lib/                    # Utilitaires
+│   ├── styles/                 # CSS global
+│   └── providers.tsx           # Context providers
+├── public/                     # Assets statiques
+├── .env.example                # Template .env
 └── package.json
 ```
 
 ---
 
-## 🎨 Code Conventions
+## 🔄 Flux de Développement
+
+### 1. Créer une Nouvelle Fonctionnalité
+
+#### Backend
+
+```bash
+# 1. Créer un module s'il n'existe pas
+nest g m modules/ma-feature
+
+# 2. Générer controller, service
+nest g co modules/ma-feature
+nest g s modules/ma-feature
+
+# 3. Ajouter modèles au schema.prisma
+# Voir docs/DATABASE.md
+
+# 4. Créer une migration
+npx prisma migrate dev --name add_ma_feature
+
+# 5. Implémenter la logique
+# - Controller (routes)
+# - Service (logique métier)
+# - DTOs pour validation
+
+# 6. Tester avec Swagger ou Postman
+# http://localhost:3001/api-docs
+```
+
+#### Frontend
+
+```bash
+# 1. Créer une page
+# /src/app/ma-feature/page.tsx
+
+# 2. Créer des composants
+# /src/components/MyFeatureComponent.tsx
+
+# 3. Ajouter les API endpoints
+# /src/lib/endpoints.ts → API_ENDPOINTS.MY_FEATURE
+
+# 4. Utiliser dans le composant
+import { API_ENDPOINTS } from '@/lib/endpoints'
+import { apiClient } from '@/lib/api-client'
+
+// Dans le component:
+const { data } = await apiClient.get(API_ENDPOINTS.MY_FEATURE)
+```
+
+### 2. Workflow Typique pour une PR
+
+```bash
+# 1. Créer une branche
+git checkout -b feature/nom-feature
+
+# 2. Développer et tester localement
+npm run dev  # Backend & frontend
+
+# 3. Tester dans le navigateur
+# Frontend: http://localhost:3000
+# API Docs: http://localhost:3001/api-docs
+
+# 4. Commit avec message clair
+git add .
+git commit -m "feat: description courte"
+# Les formats: feat:, fix:, docs:, refactor:, etc.
+
+# 5. Push et créer une PR
+git push origin feature/nom-feature
+# Créer PR sur GitHub
+
+# 6. Code review → Merge → Deploy
+```
+
+---
+
+## 💅 Conventions de Code
 
 ### TypeScript
+- ✅ Types explicites toujours
+- ✅ `interface` pour contrats
+- ✅ `type` pour unions/aliases
+- ✅ Pas de `any`, utiliser `unknown` si nécessaire
 
-#### Naming Conventions
-```typescript
-// Classes: PascalCase
-class UserService { }
-
-// Interfaces: PascalCase with I prefix (optional)
-interface IUserService { }
-type UserProfile = { ... }  // Prefer type over interface
-
-// Functions & methods: camelCase
-function getUserById(id: string) { }
-
-// Constants: UPPER_SNAKE_CASE
-const DEFAULT_PAGE_SIZE = 20;
-const MAX_RETRIES = 3;
-
-// Variables: camelCase
-let currentUser: User;
-
-// Private properties: camelCase with underscore
-private _cache: Map<string, any>;
-```
-
-#### Type Annotations
-```typescript
-// Always use explicit return types
-function calculateMatche Score(userId: string): number {
-  return 0.85;
-}
-
-// Always annotate parameters
-async function fetchUser(id: string): Promise<User> {
-  return { ... };
-}
-
-// Use const assertions for immutable values
-const config = {
-  apiUrl: 'https://api.kyndex.com',
-  maxRetries: 3
-} as const;
-```
-
-### NestJS Backend Conventions
-
-#### Module Structure
-```typescript
-// skills.module.ts
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { SkillsService } from './skills.service';
-import { SkillsController } from './skills.controller';
-import { Skill, UserSkill } from './entities';
-
-@Module({
-  imports: [TypeOrmModule.forFeature([Skill, UserSkill])],
-  controllers: [SkillsController],
-  providers: [SkillsService],
-  exports: [SkillsService], // Only export services
-})
-export class SkillsModule {}
-```
-
-#### Service Pattern
-```typescript
-// skills.service.ts
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@app/common/database/prisma.service';
-import { Skill } from './entities/skill.entity';
-import { CreateSkillDto } from './dto/create-skill.dto';
-
-@Injectable()
-export class SkillsService {
-  constructor(private readonly db: PrismaService) {}
-
-  async create(dto: CreateSkillDto): Promise<Skill> {
-    return this.db.skill.create({
-      data: dto,
-    });
-  }
-
-  async findOneById(id: string): Promise<Skill | null> {
-    return this.db.skill.findUnique({
-      where: { id },
-    });
-  }
-
-  async search(query: string): Promise<Skill[]> {
-    return this.db.skill.findMany({
-      where: {
-        name: { search: query }
-      }
-    });
-  }
-}
-```
-
-#### Controller Pattern
-```typescript
-// skills.controller.ts
-import { Controller, Get, Post, Param, Body, Query } from '@nestjs/common';
-import { SkillsService } from './skills.service';
-import { CreateSkillDto } from './dto/create-skill.dto';
-import { Public } from '@app/common/decorators/public.decorator';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
-
-@ApiTags('Skills')
-@Controller('skills')
-export class SkillsController {
-  constructor(private readonly skillsService: SkillsService) {}
-
-  @Post()
-  @ApiOperation({ summary: 'Create new skill' })
-  async create(@Body() dto: CreateSkillDto) {
-    return this.skillsService.create(dto);
-  }
-
-  @Get()
-  @Public()
-  @ApiOperation({ summary: 'List skills' })
-  async findAll(
-    @Query() query: ListSkillsQueryDto,
-  ) {
-    return this.skillsService.findMany(query);
-  }
-
-  @Get(':id')
-  @Public()
-  async findOne(@Param('id') id: string) {
-    return this.skillsService.findOneById(id);
-  }
-}
-```
-
-#### DTO Pattern
-```typescript
-// dto/create-skill.dto.ts
-import { IsString, IsEnum, MaxLength } from 'class-validator';
-
-export class CreateSkillDto {
-  @IsString()
-  @MaxLength(255)
-  name: string;
-
-  @IsEnum(['programming', 'design', 'marketing', 'other'])
-  category: string;
-
-  @IsString()
-  description?: string;
-}
-```
-
-### React Frontend Conventions
-
-#### Component Structure
-```typescript
-// components/UserCard.tsx
-import { FC } from 'react';
-import Link from 'next/link';
-import { UserProfile } from '@/lib/types';
-
-interface UserCardProps {
-  user: UserProfile;
-  onSelect?: (userId: string) => void;
-}
-
-export const UserCard: FC<UserCardProps> = ({ user, onSelect }) => {
-  return (
-    <div className="p-4 border rounded-lg hover:shadow-lg transition">
-      <h3 className="font-bold">{user.name}</h3>
-      <p className="text-sm text-gray-600">{user.location}</p>
-      <Link href={`/profile/${user.id}`}>
-        View Profile
-      </Link>
-    </div>
-  );
-};
-```
-
-#### Hook Pattern
-```typescript
-// lib/hooks/useMatching.ts
-import { useCallback, useState } from 'react';
-import { apiClient } from '@/lib/api/client';
-import type { MatchResult } from '@/lib/types';
-
-export function useMatching() {
-  const [results, setResults] = useState<MatchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchMatches = useCallback(async (userId: string) => {
-    try {
-      setLoading(true);
-      const data = await apiClient.get(`/matching/recommendations?userId=${userId}`);
-      setResults(data.matches);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Unknown error'));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  return { results, loading, error, fetchMatches };
-}
-```
+### Naming
+- **Files** : camelCase pour composants/utilitaires
+- **Classes** : PascalCase
+- **Variables** : camelCase
+- **Constants** : UPPER_SNAKE_CASE
+- **Routes API** : kebab-case
 
 ---
 
-## 🔒 Security Guidelines
+## 🔒 Sécurité
 
-### Authentication & Authorization
-```typescript
-// Always use JWT guards on protected routes
-@Controller('users')
-export class UsersController {
-  @Get('me')
-  @UseGuards(JwtAuthGuard) // Protect route
-  async getCurrentUser(@Request() req) {
-    return req.user;
-  }
-
-  @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN') // Role-based protection
-  async deleteUser(@Param('id') id: string) {
-    // Admin only
-  }
-}
-```
-
-### Input Validation
-```typescript
-// Always validate user input with pipes
-@Post()
-@UsePipes(new ValidationPipe({
-  whitelist: true,
-  forbidNonWhitelisted: true,
-  transform: true,
-}))
-async create(@Body() dto: CreateUserDto) {
-  return this.userService.create(dto);
-}
-```
-
-### Password Hashing
-```typescript
-import * as bcrypt from 'bcrypt';
-
-// Never store plain passwords
-async hashPassword(password: string): Promise<string> {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
-}
-
-// Always verify with bcrypt
-async validatePassword(plainPassword: string, hashed: string): Promise<boolean> {
-  return bcrypt.compare(plainPassword, hashed);
-}
-```
+### À Respecter
+- ✅ Ne jamais commit les `.env`
+- ✅ Valider tous les inputs côté serveur
+- ✅ HTTPS en production
+- ✅ CORS configuré strictement
+- ✅ Sanitize les inputs pour XSS
 
 ---
 
-## 📝 Database Operations
-
-### Prisma Best Practices
-
-```typescript
-// ✅ DO: Use transactions for critical operations
-const result = await prisma.$transaction(async (tx) => {
-  const transaction = await tx.transaction.create({
-    data: { ... }
-  });
-  
-  await tx.creditWallet.update({
-    where: { userId: toUserId },
-    data: { balance: { increment: amount } }
-  });
-  
-  return transaction;
-});
-
-// ❌ DON'T: Make separate calls (risk race condition)
-await prisma.transaction.create({ data: {...} });
-await prisma.creditWallet.update({ ... });
-
-// ✅ DO: Optimize queries with select
-const user = await prisma.user.findUnique({
-  where: { id: userId },
-  select: {
-    id: true,
-    email: true,
-    profile: true,
-    offeredSkills: {
-      include: { skill: true }
-    }
-  }
-});
-
-// ❌ DON'T: Fetch entire user
-const user = await prisma.user.findUnique({
-  where: { id: userId },
-  include: { _all: true } // Inefficient
-});
-```
-
----
-
-## 🧪 Testing
-
-### Unit Testing (Jest)
-
-```typescript
-// skills.service.spec.ts
-import { Test, TestingModule } from '@nestjs/testing';
-import { SkillsService } from './skills.service';
-import { PrismaService } from '@app/common/database/prisma.service';
-
-describe('SkillsService', () => {
-  let service: SkillsService;
-  let prisma: PrismaService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        SkillsService,
-        {
-          provide: PrismaService,
-          useValue: {
-            skill: {
-              findUnique: jest.fn(),
-              create: jest.fn(),
-            },
-          },
-        },
-      ],
-    }).compile();
-
-    service = module.get<SkillsService>(SkillsService);
-    prisma = module.get<PrismaService>(PrismaService);
-  });
-
-  it('should create a skill', async () => {
-    const newSkill = { id: '1', name: 'Python', category: 'programming' };
-    jest.spyOn(prisma.skill, 'create').mockResolvedValue(newSkill);
-
-    expect(await service.create({ name: 'Python', category: 'programming' }))
-      .toEqual(newSkill);
-  });
-});
-```
-
-### E2E Testing
-
-```bash
-# Run E2E tests
-npm run test:e2e
-
-# With specific test file
-npm run test:e2e -- matching.e2e-spec.ts
-```
-
----
-
-## 📊 Logging
-
-### Structured Logging (Pino)
-
-```typescript
-import { Logger } from '@nestjs/common';
-
-@Injectable()
-export class MyService {
-  private readonly logger = new Logger(MyService.name);
-
-  async doSomething() {
-    this.logger.log('Starting operation', { userId: '123' });
-    this.logger.warn('Operation took long time', { duration: 5000 });
-    this.logger.error('Operation failed', new Error('Some error'), { retries: 3 });
-  }
-}
-```
-
-### Log Levels
-- `error` : Critical issues (exceptions)
-- `warn` : Potential issues
-- `log` : General information
-- `debug` : Detailed debugging
-
----
-
-## 🚀 Deployment
-
-### Docker Build
-
-```bash
-# Build Docker image
-docker build -f docker/Dockerfile -t kyndex-api:latest .
-
-# Run container
-docker run -p 3000:3000 --env-file .env.prod kyndex-api:latest
-```
-
-### GitHub Actions CI/CD
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
-
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm ci
-      - run: npm run test
-      - run: npm run lint
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Deploy to production
-        run: |
-          # Deployment script
-```
-
----
-
-## 📋 Checklist Before PR
-
-- [ ] Code lints successfully (`npm run lint`)
-- [ ] All tests pass (`npm run test`)
-- [ ] Database migrations run successfully
-- [ ] No console.log() in code (use logger)
-- [ ] Types are correct (no `any` unless justified)
-- [ ] Environment variables documented in .env.example
-- [ ] API endpoints documented with Swagger
-- [ ] Error handling implemented
-- [ ] Input validation added
-- [ ] No secrets committed
-
----
-
-## 🐛 Debugging
-
-### VS Code Debug Configuration
-
-```json
-// .vscode/launch.json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Debug Backend",
-      "program": "${workspaceFolder}/backend/src/main.ts",
-      "preLaunchTask": "tsc: build",
-      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "runtimeArgs": ["--nolazy"],
-      "console": "integratedTerminal"
-    }
-  ]
-}
-```
-
-### Common Debugging Tips
-
-```typescript
-// Add debug logs with structured data
-this.logger.debug('Matching result', {
-  userId: '123',
-  matchScore: 0.87,
-  processingTime: '245ms'
-});
-
-// Use try/catch with proper error logging
-try {
-  await this.matchingService.findMatches(userId);
-} catch (error) {
-  this.logger.error('Matching failed', error, {
-    userId,
-    timestamp: new Date().toISOString()
-  });
-  throw error;
-}
-```
-
----
-
-## 📞 Getting Help
-
-- **Issues** : GitHub Issues for bugs/features
-- **Discussions** : GitHub Discussions for questions
-- **Docs** : [Technical Spec](../TECHNICAL_SPEC.md)
-- **Slack** : #dev-help channel
-
----
-
-**Version** : 1.0.0  
-**Mise à jour** : 27 février 2026
+**Last Updated**: 3 mars 2026

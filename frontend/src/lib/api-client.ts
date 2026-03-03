@@ -31,18 +31,30 @@ export const createApiClient = (): AxiosInstance => {
         originalRequest._retry = true;
         try {
           const refreshToken = localStorage.getItem('refreshToken');
+          
+          // Si pas de refreshToken, ne pas essayer de rafraîchir
+          if (!refreshToken) {
+            console.warn('No refresh token available');
+            // Rejeter sans redirection pour laisser l'UI gérer l'erreur
+            return Promise.reject(error);
+          }
+
+          console.log('Attempting to refresh token...');
           const response = await axios.post(`${API_URL}/auth/refresh`, {
             refreshToken,
           });
           localStorage.setItem('accessToken', response.data.accessToken);
           originalRequest.headers.Authorization = `Bearer ${response.data.accessToken}`;
           return client(originalRequest);
-        } catch (err) {
+        } catch (err: any) {
+          console.error('Token refresh failed:', err.message);
+          // Ne rediriger que si la refresh a échoué
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
           if (typeof window !== 'undefined') {
             window.location.href = '/auth/login';
           }
+          return Promise.reject(err);
         }
       }
 

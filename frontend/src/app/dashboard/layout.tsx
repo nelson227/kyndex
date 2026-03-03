@@ -2,14 +2,18 @@
 
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnreadCount } from '@/hooks/useUnreadCount';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
-const MENU_ITEMS = [
-  { id: 'home', label: 'Accueil', icon: '🏠', href: '/dashboard' },
-  { id: 'requests', label: 'Mes demandes', icon: '📋', href: '/dashboard/requests' },
-  { id: 'messages', label: 'Messagerie', icon: '💬', href: '/dashboard/messages' },
-  { id: 'account', label: 'Compte', icon: '👤', href: '/dashboard/account' },
+const getMenuItems = (unreadMessages: number, calendarNotes: number): any[] => [
+  { id: 'home', label: 'Accueil', icon: '🏠', href: '/dashboard', badge: null },
+  { id: 'requests', label: 'Mes demandes', icon: '📋', href: '/dashboard/requests', badge: null },
+  { id: 'missions', label: 'Mes missions', icon: '🎯', href: '/dashboard/missions', badge: null },
+  { id: 'messages', label: 'Messagerie', icon: '💬', href: '/dashboard/messages', badge: unreadMessages > 0 ? unreadMessages : null },
+  { id: 'calendar', label: 'Calendrier', icon: '📅', href: '/dashboard/calendar', badge: calendarNotes > 0 ? calendarNotes : null },
+  { id: 'account', label: 'Comptes', icon: '👤', href: '/dashboard/account', badge: null },
 ];
 
 export default function DashboardLayout({
@@ -20,16 +24,23 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { user, isInitialized, logout } = useAuth();
+  const { unreadMessages, calendarNotes } = useUnreadCount(user?.id);
+  const [menuItems, setMenuItems] = useState<any[]>([]);
+
+  // Mettre à jour les menu items quand les compteurs changent
+  useEffect(() => {
+    setMenuItems(getMenuItems(unreadMessages, calendarNotes));
+  }, [unreadMessages, calendarNotes]);
 
   // Redirection si non authentifié
   if (isInitialized && !user) {
-    router.push('/auth/login');
+    router.push('/');
     return null;
   }
 
   if (!isInitialized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-600">
+      <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-white">Chargement...</h1>
         </div>
@@ -43,55 +54,90 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-black">
       {/* Sidebar */}
-      <div className="w-64 bg-white border-r border-gray-200 fixed h-screen overflow-y-auto">
+      <div className="w-64 bg-gray-950 border-r border-gray-800 fixed h-screen overflow-y-auto">
         {/* Logo */}
-        <div className="p-6 border-b border-gray-200">
-          <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
-            Kyndex
+        <div className="p-6 border-b border-gray-800">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center">
+              <span className="text-white font-bold">K</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-lg font-bold text-white">Kyndex</span>
+              <span className="text-xs text-gray-400">Dashboard</span>
+            </div>
           </Link>
         </div>
 
         {/* Menu */}
         <nav className="p-4 space-y-2">
-          {MENU_ITEMS.map((item) => {
+          {menuItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.id}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition relative ${
                   isActive
-                    ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
-                    : 'text-gray-700 hover:bg-gray-50'
+                    ? 'bg-cyan-500/20 text-white border-l-4 border-cyan-500'
+                    : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/50'
                 }`}
               >
                 <span className="text-xl">{item.icon}</span>
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.badge && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
         </nav>
 
+        {/* Divider */}
+        <div className="my-4 px-4">
+          <div className="h-px bg-gray-800"></div>
+        </div>
+
         {/* Section Inviter des amis */}
-        <div className="p-4 mx-4 border-t border-gray-200 mt-6">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm font-semibold text-gray-900 mb-2">Inviter des amis</p>
-            <p className="text-xs text-gray-600 mb-3">
-              Gagnez 5% du montant dépensé par vos amis
+        <div className="p-4 mx-4 border-t border-gray-800 mt-6">
+          <div className="bg-gradient-to-br from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 p-4 rounded-xl">
+            <p className="text-sm font-semibold text-white mb-2">🎁 Inviter des amis</p>
+            <p className="text-xs text-gray-400 mb-3">
+              Gagnez 5% du montant dépensé par vos amis, à vie.
             </p>
-            <button className="text-xs text-blue-600 font-semibold hover:text-blue-700">
-              En savoir plus →
+            <button className="text-xs text-cyan-400 font-semibold hover:text-cyan-300 transition">
+              Inviter →
             </button>
           </div>
         </div>
 
-        {/* Logout Button */}
-        <div className="p-4 border-t border-gray-200 mt-auto">
+        {/* Support Links */}
+        <div className="p-4 space-y-2">
+          <button className="w-full text-left px-4 py-2 text-gray-400 hover:text-gray-300 text-sm transition flex items-center gap-2">
+            <span>📞</span> Demandes d'assistance
+          </button>
+          <button className="w-full text-left px-4 py-2 text-gray-400 hover:text-gray-300 text-sm transition flex items-center gap-2">
+            <span>❓</span> Centre d'aide
+          </button>
+        </div>
+
+        {/* User Profile (Bottom) */}
+        <div className="p-4 border-t border-gray-800 mt-auto space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+              {user?.firstName?.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white truncate">{user?.firstName} {user?.lastName}</p>
+              <p className="text-xs text-gray-400 truncate">Client • Professionnel</p>
+            </div>
+          </div>
           <button
             onClick={handleLogout}
-            className="w-full px-4 py-2 text-gray-700 hover:bg-red-50 hover:text-red-600 rounded-lg font-medium transition text-sm border border-gray-200"
+            className="w-full px-4 py-2 text-gray-400 hover:bg-red-500/20 hover:text-red-400 rounded-lg font-medium transition text-sm border border-gray-800"
           >
             Se déconnecter
           </button>
@@ -99,23 +145,22 @@ export default function DashboardLayout({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 ml-64">
+      <div className="flex-1 ml-64 bg-black overflow-hidden">
         {/* Top Header */}
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div className="border-b border-gray-800 sticky top-0 z-40 bg-black/80 backdrop-blur">
           <div className="px-8 py-4 flex justify-between items-center">
             <div></div>
-            <button className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-full hover:bg-blue-700 transition flex items-center gap-2">
-              <span>+</span> Demander un service
-            </button>
-            <div className="flex items-center gap-4">
-              <button className="relative">
-                <span className="text-2xl">🔔</span>
-                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
-                {user?.firstName?.charAt(0).toUpperCase()}
-              </div>
+            <div className="flex-1 mx-8">
+              <input
+                type="text"
+                placeholder="Rechercher une demande, mission, message..."
+                className="w-full bg-gray-900 border border-gray-800 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
+              />
             </div>
+            <button className="ml-4 relative text-gray-400 hover:text-gray-300">
+              <span className="text-2xl">🔔</span>
+              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
           </div>
         </div>
 
